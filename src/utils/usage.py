@@ -1,6 +1,8 @@
-from typing import Dict, Any
 from contextlib import AbstractContextManager
+from typing import Any, Dict
+
 from langchain_community.callbacks import get_openai_callback
+
 
 # we use OpenAICallback to give us the up-to-date numbers like tokens per model and so on.
 # as the name suggests, only works for OpenAI models
@@ -27,6 +29,7 @@ class _OpenAICallback(AbstractContextManager):
         self.tracker.node_usage[self.node_name] = report
         return False
 
+
 # General-purpose class that lets us track token usage and cost
 # costs are tracked per node, so we can identify agents that are especially costly
 class UsageTracker:
@@ -50,18 +53,25 @@ class UsageTracker:
 
     # each agent is defined as a node, so this tells us the cost for that agent
     def nodeReport(self, node_name: str) -> Dict[str, Any]:
-        return self.node_usage.get(node_name, {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "total_cost": 0.0,
-        })
+        return self.node_usage.get(
+            node_name,
+            {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "total_cost": 0.0,
+            },
+        )
 
     def totalReport(self) -> Dict[str, Any]:
         total_prompt_tokens = sum(v.get("prompt_tokens", 0) for v in self.node_usage.values())
-        total_completion_tokens = sum(v.get("completion_tokens", 0) for v in self.node_usage.values())
+        total_completion_tokens = sum(
+            v.get("completion_tokens", 0) for v in self.node_usage.values()
+        )
         total_tokens = sum(v.get("total_tokens", 0) for v in self.node_usage.values())
-        total_cost = round(sum(float(v.get("total_cost", 0.0)) for v in self.node_usage.values()), 6)
+        total_cost = round(
+            sum(float(v.get("total_cost", 0.0)) for v in self.node_usage.values()), 6
+        )
         return {
             "prompt_tokens": total_prompt_tokens,
             "completion_tokens": total_completion_tokens,

@@ -1,12 +1,15 @@
 # graph_skeleton.py
-from typing import TypedDict, Dict, Any
-from langgraph.graph import StateGraph, START, END
-from models.BaseModel import BaseModel
-from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM
+from typing import Any, Dict, TypedDict
+
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langgraph.graph import END, START, StateGraph
+from openai import OpenAIError, RateLimitError
+
+from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM
+from models.BaseModel import BaseModel
 from utils.usage import UsageTracker
-from openai import RateLimitError, OpenAIError
+
 
 # state that gets passed to each agent
 # feel free to use "memory" as a way of passing context
@@ -15,7 +18,8 @@ class GraphState(TypedDict, total=False):
     spec: Dict[str, Any]
     usage: Dict[str, Any]
     memory: Dict[str, Any]
-    usage_tracker: UsageTracker # this tracks tokens and cost for us
+    usage_tracker: UsageTracker  # this tracks tokens and cost for us
+
 
 def inputHandler(state: GraphState) -> GraphState:
     state.setdefault("memory", {})
@@ -25,15 +29,17 @@ def inputHandler(state: GraphState) -> GraphState:
     state["usage_tracker"] = UsageTracker()
     return state
 
-# use this for mocking the specification agent 
+
+# use this for mocking the specification agent
 def _mockSpec(user_prompt: str) -> dict:
     return {
         "goal": f"Interpret user request: {user_prompt}",
         "inputs": ["5V supply", "1x pushbutton (optional)"],
         "outputs": ["1x LED blinking at ~1 Hz"],
         "constraints": {"max_current_mA": 10, "breadboard_layout": True},
-        "notes": ["This is MOCK mode output", "Replace with real LLM later"]
+        "notes": ["This is MOCK mode output", "Replace with real LLM later"],
     }
+
 
 # generates a formal specification based on direct user input
 def specGeneration(state: GraphState) -> GraphState:
@@ -54,7 +60,9 @@ def specGeneration(state: GraphState) -> GraphState:
     # allows us to catch any openai errors
     try:
         with tracker.node("spec_generation", provider="openai"):
-            spec = chain.invoke({"user_prompt": user_prompt}) # calls our model with the specified prompt
+            spec = chain.invoke(
+                {"user_prompt": user_prompt}
+            )  # calls our model with the specified prompt
         state["spec"] = spec
     except RateLimitError as e:
         state["spec"] = {"error": "OpenAI quota exceeded"}
@@ -68,15 +76,17 @@ def specGeneration(state: GraphState) -> GraphState:
         state["usage"]["nodes"]["spec_generation"] = tracker.nodeReport("spec_generation")
         print("OpenAI API Error:", e)
         return state
-    
+
     # generate a per-agent report
     state["usage"]["nodes"]["spec_generation"] = tracker.nodeReport("spec_generation")
     return state
+
 
 def returnNode(state: GraphState) -> GraphState:
     tracker = state["usage_tracker"]
     state["usage"]["totals"] = tracker.totalReport()
     return state
+
 
 # add your agents here
 def buildGraph():
@@ -89,6 +99,7 @@ def buildGraph():
     graph.add_edge("spec_generation", "return_node")
     graph.add_edge("return_node", END)
     return graph.compile()
+
 
 if __name__ == "__main__":
     graph = buildGraph()

@@ -4,7 +4,13 @@ version = "0.1.0"
 description = "Automatic, end-to-end circuit prototyping system for small-to-medium sized circuits"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "langchain>=0.3.27",
+    "langchain-community>=0.3.27",
+    "langchain-openai>=0.3.30",
+    "langgraph>=0.6.4",
+    "openai>=1.99.9",
+]
 
 [dependency-groups]
 dev = [

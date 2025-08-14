@@ -1,7 +1,9 @@
-from typing import Dict, Any
 from contextlib import AbstractContextManager
+from typing import Any, Dict
+
 from langchain_community.callbacks import get_openai_callback
 from config import MAX_RUN_COST
+
 
 # we use OpenAICallback to give us the up-to-date numbers like tokens per model and so on.
 # as the name suggests, only works for OpenAI models
@@ -27,6 +29,7 @@ class _OpenAICallback(AbstractContextManager):
         }
         self.tracker.nodes[self.node_name] = report
         return False
+
 
 # General-purpose class that lets us track token usage and cost
 # costs are tracked per node, so we can identify agents that are especially costly

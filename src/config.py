@@ -11,4 +11,23 @@ Given the user's prompt, return a JSON object with:
 User prompt: {user_prompt}
 """
 
-USE_MOCK_LLM = True
+NETLIST_GENERATION_PROMPT = """
+You are an expert electronics designer. Generate a valid SPICE netlist for the following circuit specification:
+
+Specification:
+{specification}
+
+Guidelines:
+- Output only the SPICE netlist in plain text (no explanations, no code fences).
+- Ensure the netlist is compatible with Ngspice / PySpice.
+- Include all necessary component values, models, and connections.
+- If the circuit requires a power source, define it explicitly.
+- Use standard node naming (0 for ground).
+- Assume standard component models unless otherwise stated.
+
+Output format:
+<valid SPICE netlist>
+"""
+
+MAX_RUN_COST = 0.01
+USE_MOCK_LLM = False

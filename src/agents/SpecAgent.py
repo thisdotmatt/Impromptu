@@ -1,10 +1,12 @@
-from typing import Dict, Any
+from typing import Any, Dict
+
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from models.BaseModel import BaseModel
+from openai import OpenAIError, RateLimitError
+
 from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM
+from models.BaseModel import BaseModel
 from utils.usage import UsageTracker
-from openai import RateLimitError, OpenAIError
 
 
 class SpecAgent:
@@ -17,7 +19,7 @@ class SpecAgent:
             "inputs": ["5V supply", "1x pushbutton (optional)"],
             "outputs": ["1x LED blinking at ~1 Hz"],
             "constraints": {"max_current_mA": 10, "breadboard_layout": True},
-            "notes": ["This is MOCK mode output", "Replace with real LLM later"]
+            "notes": ["This is MOCK mode output", "Replace with real LLM later"],
         }
 
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:

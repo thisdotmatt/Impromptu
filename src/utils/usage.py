@@ -1,7 +1,10 @@
-from typing import Dict, Any
 from contextlib import AbstractContextManager
+from typing import Any, Dict
+
 from langchain_community.callbacks import get_openai_callback
+
 from config import MAX_RUN_COST
+
 
 # we use OpenAICallback to give us the up-to-date numbers like tokens per model and so on.
 # as the name suggests, only works for OpenAI models
@@ -28,13 +31,14 @@ class _OpenAICallback(AbstractContextManager):
         self.tracker.nodes[self.node_name] = report
         return False
 
+
 # General-purpose class that lets us track token usage and cost
 # costs are tracked per node, so we can identify agents that are especially costly
 class UsageTracker:
     def __init__(self):
         self.nodes: Dict[str, Dict[str, Any]] = {}
         self.cost_limit = MAX_RUN_COST
-        
+
     def isWithinLimit(self) -> bool:
         if self.cost_limit is None:
             return True
@@ -43,10 +47,7 @@ class UsageTracker:
 
     def generateOverBudgetMessage(self) -> str:
         total_cost = self.totalReport()["total_cost"]
-        return (
-            f"⚠️ Cost limit exceeded: ${total_cost:.6f} "
-            f"(limit: ${self.cost_limit:.6f})"
-        )
+        return f"⚠️ Cost limit exceeded: ${total_cost:.6f} (limit: ${self.cost_limit:.6f})"
 
     def node(self, node_name: str, provider: str = "openai") -> AbstractContextManager:
         # TODO: add more models, if necessary?
@@ -65,12 +66,15 @@ class UsageTracker:
 
     # each agent is defined as a node, so this tells us the cost for that agent
     def nodeReport(self, node_name: str) -> Dict[str, Any]:
-        return self.nodes.get(node_name, {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "total_cost": 0.0,
-        })
+        return self.nodes.get(
+            node_name,
+            {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "total_cost": 0.0,
+            },
+        )
 
     def totalReport(self) -> Dict[str, Any]:
         total_prompt_tokens = sum(v.get("prompt_tokens", 0) for v in self.nodes.values())
@@ -83,7 +87,7 @@ class UsageTracker:
             "total_tokens": total_tokens,
             "total_cost": total_cost,
         }
-        
+
     def formatReport(self) -> str:
         lines = []
         lines.append("Per-agent usage:")

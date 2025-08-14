@@ -1,6 +1,7 @@
-from typing import Callable, Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional
+
 from utils.usage import UsageTracker
-from workflows.NetlistWorkflow import NetlistWorkflow
+
 
 class WorkflowOrchestrator:
     def __init__(self, workflows: List[tuple], tracker: UsageTracker, max_retries: int = 1):
@@ -13,7 +14,9 @@ class WorkflowOrchestrator:
         self.tracker = tracker
         self.max_retries = max_retries
 
-    def run_workflows(self, state: Dict[str, Any], on_update: Optional[Callable] = None) -> Dict[str, Any]:
+    def run_workflows(
+        self, state: Dict[str, Any], on_update: Optional[Callable] = None
+    ) -> Dict[str, Any]:
         for workflow_name, workflow_callable in self.workflows:
             attempt = 0
             while attempt < self.max_retries:
@@ -33,7 +36,7 @@ class WorkflowOrchestrator:
 
                     if on_update:
                         on_update(workflow_name, {"status": "success"})
-                    break # success
+                    break  # success
 
                 except RuntimeError as e:
                     if on_update:

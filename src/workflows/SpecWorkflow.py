@@ -1,6 +1,8 @@
-from typing import Dict, Any
+from typing import Any, Dict
+
 from agents.SpecAgent import SpecAgent
 from utils.usage import UsageTracker
+
 
 class SpecWorkflow:
     def __init__(self, tracker: UsageTracker):

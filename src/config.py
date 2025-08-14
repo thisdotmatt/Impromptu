@@ -30,4 +30,5 @@ Output format:
 """
 
 MAX_RUN_COST = 0.01
-USE_MOCK_LLM = False
+MAX_RETRIES = 1
+USE_MOCK_LLM = True

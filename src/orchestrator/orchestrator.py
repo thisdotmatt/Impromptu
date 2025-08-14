@@ -1,11 +1,13 @@
 from typing import Any, Callable, Dict, List, Optional
 
-from utils.usage import UsageTracker
 from config import MAX_RETRIES
+from utils.usage import UsageTracker
 
 
 class WorkflowOrchestrator:
-    def __init__(self, workflows: List[tuple], tracker: UsageTracker, max_retries: int = MAX_RETRIES):
+    def __init__(
+        self, workflows: List[tuple], tracker: UsageTracker, max_retries: int = MAX_RETRIES
+    ):
         """
         workflows: list of (workflow_name, workflow_callable)
         tracker: shared UsageTracker instance

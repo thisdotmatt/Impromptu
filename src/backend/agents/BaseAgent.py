@@ -1,13 +1,12 @@
 from abc import ABC as AbstractBaseClass, abstractmethod
-from utils.usage import UsageTracker
-from typing import Any, Dict
+from utils.types import AgentResponse
 
 class BaseAgent(AbstractBaseClass):
-    def __init__(self, usage_tracker: UsageTracker):
-        self.usage_tracker = usage_tracker
+    def __init__(self):
+        pass
         
     @abstractmethod
-    def _mock(self, prompt: str) -> str:
+    def _mock(self, prompt: str) -> AgentResponse:
         """
         Generate a mock response for the given prompt.
 
@@ -19,9 +18,10 @@ class BaseAgent(AbstractBaseClass):
         pass
 
     @abstractmethod
-    def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, prompt:str) -> AgentResponse:
         """
-        Processes the provided state dictionary, interacts with the language model as needed, and updates the state accordingly.
-        This method is designed to be highly customizable, allowing derived agents to implement specific behaviors such as handling user input or tracking usage metrics.
+        Processes the provided prompt and generates a response with an error message
+        This method is designed to be highly customizable, allowing derived agents to implement 
+        specific behaviors such as handling user input or tracking usage metrics.
         """
         pass

@@ -1,79 +1,50 @@
 from orchestrator.orchestrator import WorkflowOrchestrator
-from utils.usage import UsageTracker
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
-from config import MAX_RETRIES
+from workflows.ManufacturingWorkflow import ManufacturingWorkflow
+from utils.types import WorkflowState, Status
 
-tracker = UsageTracker()
-
-spec_workflow = SpecWorkflow(tracker)
-netlist_workflow = NetlistWorkflow(tracker, tools=[simulate_tool, verify_tool])
+spec_workflow = SpecWorkflow()
+netlist_workflow = NetlistWorkflow(tools={"simulate": simulate_tool, "verify": verify_tool})
+manufacturing_workflow = ManufacturingWorkflow()
 
 orchestrator = WorkflowOrchestrator(
-    workflows=[
-        ("spec_generation", lambda *args, **kwargs: spec_workflow.run(*args, **kwargs, max_retries=MAX_RETRIES)),
-        ("netlist_pipeline", lambda *args, **kwargs: netlist_workflow.run(*args, **kwargs, max_retries=MAX_RETRIES)),
-    ],
-    tracker=tracker,
-    max_retries=MAX_RETRIES,
+    workflows={
+        "spec_generation": spec_workflow.run,
+        "netlist_generation": netlist_workflow.run,
+        "manufacturing": manufacturing_workflow.run,
+    },
+    max_retries=1,
 )
 
-initial_state = {
-    "user_input": "Blink an LED",
-    "usage": {"nodes": {}},
-    "memory": {},
-    "fail_simulation": False,
-    "fail_verification": False,
-}
+workflow_state = WorkflowState(
+        current_workflow=None,
+        context={"user_input": "Blink an LED", 
+                 "fail_simulation": False,
+                 "fail_verification": False},
+        memory={},
+        current_stage=None,
+        status=Status.PENDING,
+    )
 
-# Run
-final_state = orchestrator.run_workflows(
-    initial_state, on_update=lambda workflow, update: print(workflow, update)
-)
+final_states = orchestrator.runWorkflows(workflow_state)
 
-# Format the final state in a human-readable way
-formatted_final_state = f"""
-Final State:
-User Input: {final_state['user_input']}
+generated_spec = workflow_state.context["spec"]
+generated_netlist = workflow_state.context["netlist"]
 
-Usage:
-- Spec Generation:
-  - Prompt Tokens: {final_state['usage']['nodes']['spec_generation']['prompt_tokens']}
-  - Completion Tokens: {final_state['usage']['nodes']['spec_generation']['completion_tokens']}
-  - Total Tokens: {final_state['usage']['nodes']['spec_generation']['total_tokens']}
-  - Total Cost: ${final_state['usage']['nodes']['spec_generation']['total_cost']:.8f}
-  - Agent Group: {final_state['usage']['nodes']['spec_generation']['agent_group']}
+# display allat
 
-- Netlist Generation:
-  - Prompt Tokens: {final_state['usage']['nodes']['netlist_generation']['prompt_tokens']}
-  - Completion Tokens: {final_state['usage']['nodes']['netlist_generation']['completion_tokens']}
-  - Total Tokens: {final_state['usage']['nodes']['netlist_generation']['total_tokens']}
-  - Total Cost: ${final_state['usage']['nodes']['netlist_generation']['total_cost']:.8f}
-  - Agent Group: {final_state['usage']['nodes']['netlist_generation']['agent_group']}
-
-Memory: {final_state['memory']}
-
-Failures:
-- Simulation: {final_state['fail_simulation']}
-- Verification: {final_state['fail_verification']}
-
-Spec:
-- Goal: {final_state['spec']['goal']}
-- Inputs: {', '.join(final_state['spec']['inputs'])}
-- Outputs: {', '.join(final_state['spec']['outputs'])}
-- Constraints:
-  - Voltage: {final_state['spec']['constraints']['voltage']}
-  - Current: {final_state['spec']['constraints']['current']}
-  - Size: {final_state['spec']['constraints']['size']}
-- Notes: {final_state['spec']['notes']}
-
-Netlist Attempt: {final_state['netlist_attempt']}
-
-Netlist:\n{final_state['netlist']}
-
-Netlist Status: {final_state['netlist_status']}
-"""
-
-print("Final State:", final_state)
-print(tracker.formatReport())
-print(formatted_final_state)
+print(workflow_state.current_workflow)
+print(workflow_state.current_stage)
+print(workflow_state.status)
+print(workflow_state.err_message)
+print(f"Total cost of spec gen: ${workflow_state.workflows_context['spec_generation'].cost:.5f}")
+print(f"Total cost of netlist gen: ${workflow_state.workflows_context['netlist_generation'].cost:.5f}")
+print(f"Tokens used by spec gen: {workflow_state.workflows_context['spec_generation'].total_tokens}")
+print(f"Total used by netlist gen: {workflow_state.workflows_context['netlist_generation'].total_tokens}")
+print("Duration of spec gen:", workflow_state.workflows_context["spec_generation"].duration_ns/(1_000_000), "ms")
+print("Duration of netlist gen:", workflow_state.workflows_context["netlist_generation"].duration_ns/(1_000_000), "ms")
+print("GENERATED SPECIFICATION: ")
+print(generated_spec)
+print("GENERATED NETLIST: ")
+print(generated_netlist)

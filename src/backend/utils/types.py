@@ -1,60 +1,56 @@
 # types.py
 from __future__ import annotations
-from dataclasses import dataclass, field
+from typing import Optional, Any, Dict, TypedDict
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, Optional
-import time
+from datetime import datetime
 
-class Status(str, Enum):
-    STARTED = "started"
-    PROGRESS = "progress"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
+class Status(Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    ERROR = "error"
+    COMPLETED = "completed"
 
-@dataclass
-class TokenCost:
-    inputTokens: int = 0
-    outputTokens: int = 0
-    totalTokens: int = 0
-    estimatedCost: float = 0.0
+class AgentResponse:
+    def __init__(self, response: str, status: Status, err_message: Optional[str] = None):
+        self.response = response
+        self.status = status
+        self.err_message = err_message
+        
+class WorkflowContext:
+    def __init__(self, 
+                 start_time_ns: Optional[int] = None, 
+                 end_time_ns: Optional[int] = None, 
+                 duration_ns: Optional[int] = None,
+                 input_tokens: int = 0, 
+                 output_tokens: int = 0, 
+                 total_tokens: int = 0, 
+                 cost: float = 0.0):
+        self.start_time_ns = start_time_ns
+        self.end_time_ns = end_time_ns
+        self.duration_ns = duration_ns
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.total_tokens = total_tokens
+        self.cost = cost
 
-@dataclass
-class StageEvent:
-    stage: str
-    status: Status
-    substage: Optional[str] = None
-    attempt: Optional[int] = None
-    startedAt: Optional[int] = None  # epoch ms
-    endedAt: Optional[int] = None
-    durationMs: Optional[int] = None
-    tokenCost: Optional[TokenCost] = None
-    result: Optional[str] = None
-    netlist: Optional[str] = None
-    error: Optional[str] = None
-    payload: Dict[str, Any] = field(default_factory=dict)
+class WorkflowState:
+    def __init__(self, 
+                 current_workflow: str,
+                 current_stage: Optional[str],
+                 context: Dict[str, Dict], 
+                 memory: Optional[Dict[str, Dict]], 
+                 status: Status, 
+                 err_message: Optional[str] = None,
+                 workflows_context: Optional[Dict[str, WorkflowContext]] = None):
+        self.current_workflow = current_workflow
+        self.current_stage = current_stage or ""
+        self.context = context
+        self.memory = memory or {}
+        self.status = status
+        self.err_message = err_message or ""
+        self.workflows_context = workflows_context or {}
 
-@dataclass
-class RunState:
-    requirements: str
-    bag: Dict[str, Any] = field(default_factory=dict)
-
-@dataclass
-class RunContext:
-    usage: Any  # your UsageTracker
-    cost_limits_ok: callable  # function that returns bool
-
-class Timer:
+class Event:
     def __init__(self):
-        self._t0_perf = time.perf_counter()
-        self._t0_ms = int(time.time() * 1000)
-        self._end_ms: Optional[int] = None
-
-    @property
-    def start_ms(self) -> int:
-        return self._t0_ms
-
-    def finish(self):
-        if self._end_ms is None:
-            self._end_ms = int(time.time() * 1000)
-        dur = int((time.perf_counter() - self._t0_perf) * 1000)
-        return self._t0_ms, self._end_ms, dur
+        pass

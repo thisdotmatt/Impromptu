@@ -29,6 +29,6 @@ Output format:
 <valid SPICE netlist>
 """
 
-MAX_RUN_COST = 0.001
+MAX_RUN_COST = 0.001 # in USD
 MAX_RETRIES = 1
 USE_MOCK_LLM = True

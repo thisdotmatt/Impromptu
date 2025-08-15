@@ -1,11 +1,9 @@
-from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Dict, Optional
 import time
 
 from utils.types import WorkflowContext, WorkflowState, Status
 from config import MAX_RETRIES, MAX_RUN_COST
 from langchain_community.callbacks import get_openai_callback
-
 
 class WorkflowOrchestrator:
     '''
@@ -13,7 +11,7 @@ class WorkflowOrchestrator:
     '''
     def __init__(self, workflows: Dict[str, Callable], max_retries: int = MAX_RETRIES):
         """
-        workflows: dictionary mapping workflow_name to workflow_callable
+        workflows: dictionary mapping workflow_name to the function to run that workflow
         max_retries: retries per workflow if it fails
         """
         self.workflows = workflows
@@ -27,7 +25,7 @@ class WorkflowOrchestrator:
 
     def runWorkflows(self, workflow_state: WorkflowState) -> WorkflowState:
         for workflow_name, workflow_callable in self.workflows.items():
-            # Stop before starting if we're already at/over the limit
+            # stop before entering loop if we're already at/over the limit
             if MAX_RUN_COST is not None and self._calculateTotalSpend(workflow_state) >= MAX_RUN_COST:
                 workflow_state.status = Status.ERROR
                 total_spend = self._calculateTotalSpend(workflow_state)
@@ -58,7 +56,7 @@ class WorkflowOrchestrator:
                     except Exception as e:
                         exception_in_workflow = e
 
-                # Aggregate attempt usage
+                # calculate costs/tokens
                 workflow_context.input_tokens += int(getattr(callback, "prompt_tokens", 0) or 0)
                 workflow_context.output_tokens += int(getattr(callback, "completion_tokens", 0) or 0)
                 workflow_context.total_tokens += int(getattr(callback, "total_tokens", 0) or 0)

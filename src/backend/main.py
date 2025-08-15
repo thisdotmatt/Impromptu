@@ -1,8 +1,8 @@
 from orchestrator.orchestrator import WorkflowOrchestrator
+from utils.types import Status, WorkflowState
+from workflows.ManufacturingWorkflow import ManufacturingWorkflow
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
-from workflows.ManufacturingWorkflow import ManufacturingWorkflow
-from utils.types import WorkflowState, Status
 
 spec_workflow = SpecWorkflow()
 netlist_workflow = NetlistWorkflow(tools={"simulate": simulate_tool, "verify": verify_tool})
@@ -18,14 +18,12 @@ orchestrator = WorkflowOrchestrator(
 )
 
 workflow_state = WorkflowState(
-        current_workflow=None,
-        context={"user_input": "Blink an LED", 
-                 "fail_simulation": False,
-                 "fail_verification": False},
-        memory={},
-        current_stage=None,
-        status=Status.PENDING,
-    )
+    current_workflow=None,
+    context={"user_input": "Blink an LED", "fail_simulation": False, "fail_verification": False},
+    memory={},
+    current_stage=None,
+    status=Status.PENDING,
+)
 
 final_states = orchestrator.runWorkflows(workflow_state)
 
@@ -39,11 +37,25 @@ print(workflow_state.current_stage)
 print(workflow_state.status)
 print(workflow_state.err_message)
 print(f"Total cost of spec gen: ${workflow_state.workflows_context['spec_generation'].cost:.5f}")
-print(f"Total cost of netlist gen: ${workflow_state.workflows_context['netlist_generation'].cost:.5f}")
-print(f"Tokens used by spec gen: {workflow_state.workflows_context['spec_generation'].total_tokens}")
-print(f"Total used by netlist gen: {workflow_state.workflows_context['netlist_generation'].total_tokens}")
-print("Duration of spec gen:", workflow_state.workflows_context["spec_generation"].duration_ns/(1_000_000), "ms")
-print("Duration of netlist gen:", workflow_state.workflows_context["netlist_generation"].duration_ns/(1_000_000), "ms")
+print(
+    f"Total cost of netlist gen: ${workflow_state.workflows_context['netlist_generation'].cost:.5f}"
+)
+print(
+    f"Tokens used by spec gen: {workflow_state.workflows_context['spec_generation'].total_tokens}"
+)
+print(
+    f"Total used by netlist gen: {workflow_state.workflows_context['netlist_generation'].total_tokens}"
+)
+print(
+    "Duration of spec gen:",
+    workflow_state.workflows_context["spec_generation"].duration_ns / (1_000_000),
+    "ms",
+)
+print(
+    "Duration of netlist gen:",
+    workflow_state.workflows_context["netlist_generation"].duration_ns / (1_000_000),
+    "ms",
+)
 print("GENERATED SPECIFICATION: ")
 print(generated_spec)
 print("GENERATED NETLIST: ")

@@ -3,20 +3,20 @@ import json
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from config import USE_MOCK_LLM  # project-level config flag
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-
 from orchestrator.orchestrator import WorkflowOrchestrator
 from utils.usage import UsageTracker
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
-from config import USE_MOCK_LLM  # project-level config flag
 
 app = FastAPI(title="Orchestrator SSE Bridge")
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _to_ui_token_cost(node_usage: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -87,6 +87,7 @@ def _default_token_cost(stage: str) -> Optional[Dict[str, Any]]:
 # Endpoint
 # ---------------------------------------------------------------------------
 
+
 @app.post("/orchestrator/run")
 async def run_orchestrator(request: Request) -> StreamingResponse:
     body = await request.json()
@@ -106,11 +107,25 @@ async def run_orchestrator(request: Request) -> StreamingResponse:
 
     # Decide which workflows to run
     if retry_from_stage == "design":
-        workflows = [("netlist_generation", lambda *args, **kwargs: netlist_workflow.run(*args, **kwargs, max_retries=1))]
+        workflows = [
+            (
+                "netlist_generation",
+                lambda *args, **kwargs: netlist_workflow.run(*args, **kwargs, max_retries=1),
+            )
+        ]
     elif retry_from_stage == "manufacturing":
         workflows = []  # we'll only emit manufacturing mock
     else:
-        workflows = [("spec_generation", lambda *args, **kwargs: spec_workflow.run(*args, **kwargs, max_retries=1)), ("netlist_generation", lambda *args, **kwargs: netlist_workflow.run(*args, **kwargs, max_retries=1))]
+        workflows = [
+            (
+                "spec_generation",
+                lambda *args, **kwargs: spec_workflow.run(*args, **kwargs, max_retries=1),
+            ),
+            (
+                "netlist_generation",
+                lambda *args, **kwargs: netlist_workflow.run(*args, **kwargs, max_retries=1),
+            ),
+        ]
 
     orchestrator = WorkflowOrchestrator(workflows=workflows, tracker=tracker, max_retries=1)
 
@@ -121,8 +136,8 @@ async def run_orchestrator(request: Request) -> StreamingResponse:
     }
 
     # Timing & status tracking (thread-safe enough for our usage)
-    stage_t0_mono: Dict[str, float] = {}     # perf_counter start
-    stage_t0_wall_ms: Dict[str, int] = {}    # wall-clock start ms
+    stage_t0_mono: Dict[str, float] = {}  # perf_counter start
+    stage_t0_wall_ms: Dict[str, int] = {}  # wall-clock start ms
     seen_running: set[str] = set()
     stage_success: Dict[str, bool] = {"spec": False, "design": False}
     had_error = {"value": False}  # boxed to mutate inside closure
@@ -191,7 +206,13 @@ async def run_orchestrator(request: Request) -> StreamingResponse:
                 stage_t0_wall_ms.setdefault(ui_stage, _now_ms())
                 loop.call_soon_threadsafe(
                     asyncio.create_task,
-                    emit({"stage": ui_stage, "status": "running", "startTimeMs": stage_t0_wall_ms[ui_stage]}),
+                    emit(
+                        {
+                            "stage": ui_stage,
+                            "status": "running",
+                            "startTimeMs": stage_t0_wall_ms[ui_stage],
+                        }
+                    ),
                 )
             return  # nothing else to send for a 'running' tick
 
@@ -202,14 +223,21 @@ async def run_orchestrator(request: Request) -> StreamingResponse:
             stage_t0_wall_ms.setdefault(ui_stage, _now_ms())
             loop.call_soon_threadsafe(
                 asyncio.create_task,
-                emit({"stage": ui_stage, "status": "running", "startTimeMs": stage_t0_wall_ms[ui_stage]}),
+                emit(
+                    {
+                        "stage": ui_stage,
+                        "status": "running",
+                        "startTimeMs": stage_t0_wall_ms[ui_stage],
+                    }
+                ),
             )
             # fall through to also emit the completion payload
 
         # Sub-stage updates stream straight through
         if sub_stage:
             loop.call_soon_threadsafe(
-                asyncio.create_task, emit({"stage": ui_stage, "subStage": sub_stage, "status": status})
+                asyncio.create_task,
+                emit({"stage": ui_stage, "subStage": sub_stage, "status": status}),
             )
             return
 
@@ -310,12 +338,11 @@ async def run_orchestrator(request: Request) -> StreamingResponse:
             if workflows:
                 # Run workflows directly in main event loop (no thread)
                 # This allows onUpdate callbacks to be processed immediately
-                import threading
                 import concurrent.futures
-                
+
                 def run_orchestrator_sync():
                     return orchestrator.run_workflows(initial_state, onUpdate)
-                
+
                 # Use ThreadPoolExecutor with a single thread to allow GIL release
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(run_orchestrator_sync)

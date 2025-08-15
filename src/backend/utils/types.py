@@ -1,8 +1,9 @@
 # types.py
 from __future__ import annotations
-from typing import Optional, Any, Dict, TypedDict
+
 from enum import Enum
-from datetime import datetime
+from typing import Dict, Optional
+
 
 class Status(Enum):
     PENDING = "pending"
@@ -11,21 +12,25 @@ class Status(Enum):
     ERROR = "error"
     COMPLETED = "completed"
 
+
 class AgentResponse:
     def __init__(self, response: str, status: Status, err_message: Optional[str] = None):
         self.response = response
         self.status = status
         self.err_message = err_message
-        
+
+
 class WorkflowContext:
-    def __init__(self, 
-                 start_time_ns: Optional[int] = None, 
-                 end_time_ns: Optional[int] = None, 
-                 duration_ns: Optional[int] = None,
-                 input_tokens: int = 0, 
-                 output_tokens: int = 0, 
-                 total_tokens: int = 0, 
-                 cost: float = 0.0):
+    def __init__(
+        self,
+        start_time_ns: Optional[int] = None,
+        end_time_ns: Optional[int] = None,
+        duration_ns: Optional[int] = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        total_tokens: int = 0,
+        cost: float = 0.0,
+    ):
         self.start_time_ns = start_time_ns
         self.end_time_ns = end_time_ns
         self.duration_ns = duration_ns
@@ -34,15 +39,18 @@ class WorkflowContext:
         self.total_tokens = total_tokens
         self.cost = cost
 
+
 class WorkflowState:
-    def __init__(self, 
-                 current_workflow: str,
-                 current_stage: Optional[str],
-                 context: Dict[str, Dict], 
-                 memory: Optional[Dict[str, Dict]], 
-                 status: Status, 
-                 err_message: Optional[str] = None,
-                 workflows_context: Optional[Dict[str, WorkflowContext]] = None):
+    def __init__(
+        self,
+        current_workflow: str,
+        current_stage: Optional[str],
+        context: Dict[str, Dict],
+        memory: Optional[Dict[str, Dict]],
+        status: Status,
+        err_message: Optional[str] = None,
+        workflows_context: Optional[Dict[str, WorkflowContext]] = None,
+    ):
         self.current_workflow = current_workflow
         self.current_stage = current_stage or ""
         self.context = context
@@ -50,6 +58,7 @@ class WorkflowState:
         self.status = status
         self.err_message = err_message or ""
         self.workflows_context = workflows_context or {}
+
 
 class Event:
     def __init__(self):

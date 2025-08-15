@@ -1,16 +1,19 @@
-from typing import Dict, List, Callable
-from abc import ABC as AbstractBaseClass, abstractmethod
+from abc import ABC as AbstractBaseClass
+from abc import abstractmethod
+from typing import Callable, Dict, List
+
 from utils.types import WorkflowState
+
 
 class BaseWorkflow(AbstractBaseClass):
     def __init__(self, tools: Dict[str, List[Callable]] = None):
-        self.tools = tools # deterministic, non-LLM tools
+        self.tools = tools  # deterministic, non-LLM tools
 
     @abstractmethod
-    def run(self, state: WorkflowState, max_retries: int=1) -> WorkflowState:
+    def run(self, state: WorkflowState, max_retries: int = 1) -> WorkflowState:
         """
         Runs the end-to-end workflow while updating the upstream workflow orchestrator.
-        Args: 
+        Args:
             state: WorkflowState represents the stored memory provided by the orchestrator, your workflow will edit the state and return it
             onUpdate: this is the method that is used to update the orchestrator with what is currently happening (e.g. "I am still running")
             max_retries: allows the workflow to loop a certain number of times before failing

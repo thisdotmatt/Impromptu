@@ -1,10 +1,13 @@
-from abc import ABC as AbstractBaseClass, abstractmethod
+from abc import ABC as AbstractBaseClass
+from abc import abstractmethod
+
 from utils.types import AgentResponse
+
 
 class BaseAgent(AbstractBaseClass):
     def __init__(self):
         pass
-        
+
     @abstractmethod
     def _mock(self, prompt: str) -> AgentResponse:
         """
@@ -18,10 +21,10 @@ class BaseAgent(AbstractBaseClass):
         pass
 
     @abstractmethod
-    def run(self, prompt:str) -> AgentResponse:
+    def run(self, prompt: str) -> AgentResponse:
         """
         Processes the provided prompt and generates a response with an error message
-        This method is designed to be highly customizable, allowing derived agents to implement 
+        This method is designed to be highly customizable, allowing derived agents to implement
         specific behaviors such as handling user input or tracking usage metrics.
         """
         pass

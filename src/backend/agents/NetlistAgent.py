@@ -1,23 +1,23 @@
-from typing import Any
+from config import NETLIST_GENERATION_PROMPT, USE_MOCK_LLM
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from openai import OpenAIError, RateLimitError
-from config import NETLIST_GENERATION_PROMPT, USE_MOCK_LLM
 from models.OpenAIModel import OpenAIModel
-from agents.BaseAgent import BaseAgent
+from openai import OpenAIError, RateLimitError
 from utils.types import AgentResponse, Status
 
+from agents.BaseAgent import BaseAgent
+
+
 class NetlistAgent(BaseAgent):
-    '''
+    """
     Takes in a pre-defined electrical specification and converts this into a netlist.
     The generated netlist is NOT verified - this agent is strictly for generation.
     We use open source tools and similar to verify the functionality of the netlist
-    and retry if necessary. See src/backend/workflows/NetlistWorkflow.py 
-    '''
+    and retry if necessary. See src/backend/workflows/NetlistWorkflow.py
+    """
+
     def _mock(self, prompt: str) -> str:
-        return (
-            f"* MOCK Netlist for: {prompt}\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 10uF\n.end"
-        )
+        return f"* MOCK Netlist for: {prompt}\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 10uF\n.end"
 
     def run(self, prompt: str) -> AgentResponse:
         if USE_MOCK_LLM:
@@ -25,7 +25,7 @@ class NetlistAgent(BaseAgent):
             return mock_response
 
         # sets up the LLM pipeline
-        # we create a prompt template with the prompt and whatever input variables 
+        # we create a prompt template with the prompt and whatever input variables
         # we'd like to add in (e.g. context). Then we pass the result to our LLM, and then
         # parse the generated text in JSON format
         llm = OpenAIModel().getModel()
@@ -44,7 +44,7 @@ class NetlistAgent(BaseAgent):
         except OpenAIError as e:
             err_message = f"Encountered OpenAI error with message {e}"
             print("OpenAI API Error:", e)
-            return AgentResponse(response="", status=Status.ERROR, err_message=err_message)        
+            return AgentResponse(response="", status=Status.ERROR, err_message=err_message)
         # for all other exceptions, we generally want the program to end "loudly" so that we can fix the bug
-        
+
         return AgentResponse(response=netlist_text, status=Status.SUCCESS)

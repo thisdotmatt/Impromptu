@@ -1,13 +1,16 @@
-from typing import Dict, List, Callable
-from agents.NetlistAgent import NetlistAgent
-from utils.types import WorkflowState, Status
-from workflows.BaseWorkflow import BaseWorkflow
 import time
+from typing import Callable, Dict, List
+
+from agents.NetlistAgent import NetlistAgent
+from utils.types import Status, WorkflowState
+from workflows.BaseWorkflow import BaseWorkflow
+
 
 class NetlistWorkflow(BaseWorkflow):
-    '''
+    """
     Workflow for generating a netlist from an engineering specification and verifying it using external tools
-    '''
+    """
+
     def __init__(self, tools: Dict[str, List[Callable]] = None):
         self.agent = NetlistAgent()
         self.tools = tools
@@ -15,9 +18,9 @@ class NetlistWorkflow(BaseWorkflow):
     def run(self, state: WorkflowState, max_retries: int = 1) -> WorkflowState:
         if state.context.get("spec") == None:
             state.status = Status.ERROR
-            state.err_message = f"Error during workflow {state.current_workflow}: missing \'spec\' field in state.context"
+            state.err_message = f"Error during workflow {state.current_workflow}: missing 'spec' field in state.context"
             return state
-        
+
         attempt = 0
         while attempt < max_retries:
             attempt += 1
@@ -30,7 +33,7 @@ class NetlistWorkflow(BaseWorkflow):
                 state.status = Status.ERROR
                 state.err_message = f"Error during workflow {state.current_workflow} while executing agent: {agent_response.err_message}"
                 return state
-            
+
             state.context["netlist"] = agent_response.response
 
             # run the tools to verify the netlist is correct
@@ -41,15 +44,15 @@ class NetlistWorkflow(BaseWorkflow):
                     print(f"Running tool: {tool_name}")
                     state.current_stage = tool_name
                     state.status = Status.RUNNING
-                    
+
                     state = self.tools[tool_name](state)
                     print(f"Status for tool {tool_name}: {state.status}")
-                    
+
                     if state.status == Status.ERROR:
                         all_tools_passed = False
                         break
 
-            if all_tools_passed: # else retry/fail
+            if all_tools_passed:  # else retry/fail
                 state.status = Status.SUCCESS
                 return state
 
@@ -61,9 +64,11 @@ class NetlistWorkflow(BaseWorkflow):
 
 def simulate_tool(state: WorkflowState):
     time.sleep(1)
-    if state.context.get("fail_simulation", False): # sneaky way to allow us to test this by forcing it to fail
+    if state.context.get(
+        "fail_simulation", False
+    ):  # sneaky way to allow us to test this by forcing it to fail
         state.status = Status.ERROR
-        state.err_message = f"Induced failed simulation"
+        state.err_message = "Induced failed simulation"
         return state
     state.context["simulation_result"] = {"result": "Done"}
     return state
@@ -71,9 +76,11 @@ def simulate_tool(state: WorkflowState):
 
 def verify_tool(state: WorkflowState):
     time.sleep(1)
-    if state.context.get("fail_verification", False): # sneaky way to allow us to test this by forcing it to fail
+    if state.context.get(
+        "fail_verification", False
+    ):  # sneaky way to allow us to test this by forcing it to fail
         state.status = Status.ERROR
-        state.err_message = f"Induced failed verification"
+        state.err_message = "Induced failed verification"
         return state
     state.context["verification_result"] = {"result": "Done"}
     return state

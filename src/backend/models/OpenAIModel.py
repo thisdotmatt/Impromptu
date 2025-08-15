@@ -1,14 +1,12 @@
 from langchain_openai import ChatOpenAI
+from models.BaseModel import BaseModel
 
-
-class BaseModel:
+class OpenAIModel(BaseModel):
     """
-    Template for our LLM base, currently using GPT 4o just because it's cheap
+    Implementation of BaseModel for OpenAI LLMs using langchain_openai.ChatOpenAI.
     """
-
     def __init__(self, model_name="gpt-4o-mini", temperature=0.7):
-        self.model_name = model_name
-        self.temperature = temperature
+        super().__init__(model_name, temperature)
         self.llm = ChatOpenAI(model=self.model_name, temperature=self.temperature)
 
     def getModel(self):

@@ -1,2 +1,0 @@
-# Impromptu Documentation
-WIP

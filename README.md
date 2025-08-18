@@ -49,7 +49,7 @@ To run the web application, you'll need to first start our API locally:
 
 ```bash
 cd src/backend
-uv run server.py
+uv run uvicorn server:app --reload
 ```
 
 Then, start the web app with `npm run dev`. This will start your webapp at `http://localhost:3000/`.

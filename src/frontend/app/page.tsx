@@ -53,32 +53,133 @@ export default function Home() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim()) return
+      e.preventDefault()
+      if (!input.trim()) return
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: input,
-      role: "user",
-      timestamp: new Date(),
-    }
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        content: input,
+        role: "user",
+        timestamp: new Date(),
+      }
 
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setIsLoading(true)
+      // Build the history we will send to the backend (include the new user message)
+      const history = [...messages, userMessage].map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
 
-    // TODO: replace this with a call to the actual server.py ChatGPT-like interface
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: `I understand you're working on circuit design. Using ${selectedModel}, I can help you with circuit analysis, component selection, and design optimization. What specific circuit challenge are you facing?`,
+      setMessages((prev) => [...prev, userMessage])
+      setInput("")
+      setIsLoading(true)
+
+      // Create a placeholder assistant message that we'll fill as chunks arrive
+      const assistantId = (Date.now() + 1).toString()
+      const placeholder: Message = {
+        id: assistantId,
+        content: "Thinking...", // show this instead of an empty bubble/caret
         role: "assistant",
         timestamp: new Date(),
       }
-      setMessages((prev) => [...prev, assistantMessage])
-      setIsLoading(false)
-    }, 1000)
-  }
+      setMessages((prev) => [...prev, placeholder])
+
+      try {
+        const controller = new AbortController()
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: history,
+            selectedModel,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!res.ok || !res.body) {
+          throw new Error(`Chat request failed with status ${res.status}`)
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+        let buffer = ""
+
+        const applyDelta = (delta: string) => {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== assistantId) return m
+              const base = m.content === "Thinking..." ? "" : m.content // replace the first time
+              return { ...m, content: base + delta }
+            })
+          )
+        }
+
+        // Parse SSE: lines separated by \n\n, extract the JSON from "data: ..."
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+
+          let sepIndex: number
+          while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+            const rawEvent = buffer.slice(0, sepIndex).trim()
+            buffer = buffer.slice(sepIndex + 2)
+
+            // For safety, handle multi-line SSE blocks; find the data line(s)
+            const dataLines = rawEvent
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.replace(/^data:\s*/, ""))
+
+            for (const data of dataLines) {
+              if (!data) continue
+              let evt: any
+              try {
+                evt = JSON.parse(data)
+              } catch {
+                continue
+              }
+
+              switch (evt.type) {
+                case "message_start":
+                  // Optionally sync IDs; we keep local assistantId to update the correct bubble
+                  break
+                case "chunk":
+                  applyDelta(evt.delta || "")
+                  break
+                case "message_end":
+                  // Ensure final content is set (already accumulated)
+                  setIsLoading(false)
+                  break
+                case "error":
+                  applyDelta("\n\nSorry, I had trouble responding. Please try again.")
+                  setIsLoading(false)
+                  break
+                case "complete":
+                  // Stream finished
+                  break
+                default:
+                  break
+              }
+            }
+          }
+        }
+      } catch (err) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content:
+                    m.content +
+                    "\n\nSorry, I had trouble responding. Please try again.",
+                }
+              : m
+          )
+        )
+        setIsLoading(false)
+      }
+    }
 
   const handlePipelineStagesUpdate = (stages: any[]) => {
     setPipelineStages(stages)
@@ -119,18 +220,17 @@ export default function Home() {
                         </div>
                       ) : (
                         <div className="max-w-[80%]">
-                          <TypewriterMessage content={message.content} timestamp={message.timestamp} speed={25} />
+                          {message.content && message.content !== "Thinking..." ? (
+                            <TypewriterMessage content={message.content} timestamp={message.timestamp} speed={25} />
+                          ) : (
+                            <div className="bg-muted rounded-lg px-4 py-2">
+                              <p className="text-sm">Thinking...</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-muted rounded-lg px-4 py-2">
-                        <p className="text-sm">Thinking...</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </ScrollArea>

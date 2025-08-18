@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Dict
 
-from config import MAX_RETRIES
+from config import MAX_RETRIES, CHAT_SYSTEM_PROMPT
 from executor import Executor
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
@@ -10,6 +10,7 @@ from utils.types import EventCallback, Status, WorkflowState, sse_headers
 from workflows.ManufacturingWorkflow import ManufacturingWorkflow
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
+from agents.ChatAgent import ChatAgent
 
 app = FastAPI(title="Impromptu API")
 
@@ -86,6 +87,39 @@ async def event_stream(run_id: str):
         if event.get("type") == "complete":
             break
 
+@app.post("/chat")
+async def chat(request: Request):
+    """
+    Streaming chat endpoint returning server-sent events:
+      - message_start
+      - chunk
+      - message_end
+      - error (if any)
+      - complete (always at end)
+    """
+    print("received /chat request")
+    body = await request.json()
+    messages = body.get("messages") or []
+    messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}, *messages]
+    selected_model = "gpt-4o-mini"# body.get("selectedModel") or "gpt-4o-mini"
+    temperature = body.get("temperature") or 0.7
+    
+    print("Messages: ", messages)
+    print("Selected Model: ", selected_model)
+    
+    agent = ChatAgent()
+
+    async def getChatMessages():
+        try:
+            async for evt in agent.stream(messages, selected_model, temperature):
+                yield formatSSEMessage(evt)
+        except Exception as e:
+            print("Failed with exception: ", e)
+            yield formatSSEMessage({"type": "error", "message": str(e)})
+        finally:
+            yield formatSSEMessage({"type": "complete"})
+
+    return StreamingResponse(getChatMessages(), headers=sse_headers)
 
 @app.post("/create/{run_id}")
 async def create(run_id: str, request: Request):

@@ -1,8 +1,7 @@
-from typing import Dict, List, Awaitable
 from datetime import datetime, timezone
-import asyncio
+from typing import Awaitable, Dict, List
 
-from utils.types import Status, WorkflowState, EventCallback
+from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
 
 

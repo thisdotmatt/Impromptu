@@ -1,11 +1,10 @@
-import asyncio
 import time
-from typing import Callable, Dict, Optional
 from datetime import datetime, timezone
+from typing import Dict, Optional
 
 from config import MAX_RETRIES, MAX_RUN_COST
 from langchain_community.callbacks import get_openai_callback
-from utils.types import Status, WorkflowContext, WorkflowState, EventCallback
+from utils.types import EventCallback, Status, WorkflowContext, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
 
 
@@ -37,7 +36,9 @@ class WorkflowOrchestrator:
             for workflow_name in workflow_state.workflows_context.keys()
         )
 
-    async def runWorkflows(self, updateCallback: EventCallback, workflow_state: WorkflowState) -> WorkflowState:
+    async def runWorkflows(
+        self, updateCallback: EventCallback, workflow_state: WorkflowState
+    ) -> WorkflowState:
         await updateCallback(
             "run_started",
             {
@@ -166,8 +167,8 @@ class WorkflowOrchestrator:
                         "workflow": workflow_name,
                         "attempt": attempt,
                         "error": workflow_state.err_message
-                                or last_error_message
-                                or "Unknown error",
+                        or last_error_message
+                        or "Unknown error",
                         "context": {
                             "total_tokens": workflow_context.total_tokens,
                             "cost": workflow_context.cost,

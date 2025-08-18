@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, TypedDict, Optional, Callable, Any, Awaitable, List
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypedDict
 
 sse_headers = {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "X-Accel-Buffering": "no",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-    }
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "X-Accel-Buffering": "no",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+}
 
 EventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
+
 
 class Status(Enum):
     PENDING = "pending"
@@ -72,4 +73,3 @@ class Event(TypedDict):
     workflow_names: List[str]
     status: Status
     err_message: str
-    

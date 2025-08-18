@@ -25,7 +25,9 @@ uv sync
 
 If you plan to use our web app as opposed to just the terminal version of Impromptu, you'll need to have [node/npm](https://nodejs.org/en/download/) installed. Once installed, run `npm install` to download all required dependencies.
 
-3. Add your OpenAI key to your environment variables:
+3. Configure your Impromptu environment.
+
+Add your OpenAI key to your environment variables:
 
 ```bash
 export OPENAI_API_KEY="<YOUR_OPENAI_KEY_HERE>"   // macOS/Linux
@@ -33,6 +35,8 @@ setx OPENAI_API_KEY "<YOUR_OPENAI_KEY_HERE>"     // Windows only
 ```
 
 Make sure to restart your IDE after doing this. You can verify this has worked by executing `uv run src/utils/check_api_key.py` in your terminal. The result should be your API key in the form "sk..."
+
+You'll also want to turn off USE_MOCK_LLM, which allows developers to test the system without using API credits (mocks the output of each workflow). You can find the configeration in [config.py](./src/backend/config.py).
 
 4. That's it! From here, you have two ways of running Imprompt - terminal-based and web-based. To run the terminal application:
 

@@ -42,6 +42,7 @@ async def orchestrate_workflows(run_id: str, payload: Dict, updateCallback: Even
     retry_from_stage = (payload.get("retryFromStage") or "spec_generation").lower()
 
     print(f"User input found: {user_input}")
+    print(f"Conversation context: {conversation_context}")
 
     # run orchestrator script
     spec_workflow = SpecWorkflow()

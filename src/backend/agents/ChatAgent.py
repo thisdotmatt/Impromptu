@@ -1,11 +1,11 @@
 import asyncio
 import time
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional
-from utils.types import AgentResponse, Status
+from typing import Any, AsyncGenerator, Dict, List
 
 from config import USE_MOCK_LLM
 from models.OpenAIModel import OpenAIModel
+from utils.types import AgentResponse, Status
 
 from agents.BaseAgent import BaseAgent
 
@@ -17,9 +17,13 @@ class ChatAgent(BaseAgent):
       - chunk
       - message_end
     """
+
     def _mock(self, prompt: str) -> AgentResponse:
-        return AgentResponse(response ="This is a mock streaming reply. Replace with the real LLM when ready.", status=Status.SUCCESS)
-    
+        return AgentResponse(
+            response="This is a mock streaming reply. Replace with the real LLM when ready.",
+            status=Status.SUCCESS,
+        )
+
     async def run(self, prompt: str) -> AgentResponse:
         pass
 
@@ -32,7 +36,7 @@ class ChatAgent(BaseAgent):
     ) -> AsyncGenerator[Dict[str, Any], None]:
         msg_id = str(uuid.uuid4())
         created = time.time()
-        
+
         yield {"type": "message_start", "id": msg_id, "model": modelName, "created": created}
 
         if USE_MOCK_LLM:

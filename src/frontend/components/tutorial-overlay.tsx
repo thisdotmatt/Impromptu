@@ -25,14 +25,14 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
       title: "Chat",
       description: "Discuss your business needs with an LLM",
       detail:
-        "Start by describing your circuit requirements, specifications, and constraints through natural conversation.",
+        "Describe your circuit requirements, specifications, and constraints through natural conversation.",
     },
     {
       icon: Cpu,
       title: "Design",
       description: "Automatically generate a verified circuit design",
       detail:
-        "Our AI agents create optimized circuit designs, run simulations, and verify functionality automatically.",
+        "Our AI agents will create your circuit design, run simulations, and verify using industry-standard tools.",
     },
     {
       icon: Factory,
@@ -58,14 +58,13 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
 
           <div className="text-center mb-12">
             <h2 className="text-2xl font-semibold mb-4">End-to-End Automatic Circuit Design</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From conversation to physical circuit board in three simple steps. Let AI handle the complexity while you
-              focus on innovation.
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-center">
+              From conversation to physical circuit board in three simple steps.
             </p>
           </div>
 
           <div className="relative mb-8">
-            <div className="hidden md:block absolute top-10 left-0 w-full h-0.5 bg-border z-0" />
+            {/* <div className="hidden md:block absolute top-10 left-0 w-full h-0.5 bg-border z-0" /> */}
 
             <div className="grid md:grid-cols-3 gap-8">
               {steps.map((step, index) => {
@@ -82,7 +81,7 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
                     </div>
                     <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
                     <p className="text-sm text-muted-foreground mb-3">{step.description}</p>
-                    <p className="text-xs text-muted-foreground">{step.detail}</p>
+                    {/* <p className="text-xs text-muted-foreground">{step.detail}</p> */}
                   </div>
                 )
               })}

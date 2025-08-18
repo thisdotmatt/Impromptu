@@ -26,7 +26,7 @@ type Page = "home" | "about" | "faq" | "tutorial"
 
 export default function Home() {
   const [currentPage, setCurrentPage] = useState<Page>("home")
-  const [showTutorial, setShowTutorial] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [selectedModel, setSelectedModel] = useState("gpt-4")
@@ -44,8 +44,8 @@ export default function Home() {
   }, [])
 
   const handleCloseTutorial = () => {
-    // setShowTutorial(false)
-    localStorage.setItem("impromptu-tutorial-seen", "true")
+    setShowTutorial(false)
+    // localStorage.setItem("impromptu-tutorial-seen", "true")
   }
 
   const handleShowTutorial = () => {
@@ -67,7 +67,7 @@ export default function Home() {
     setInput("")
     setIsLoading(true)
 
-    // Simulate API call - replace with your actual LLM API
+    // TODO: replace this with a call to the actual server.py ChatGPT-like interface
     setTimeout(() => {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -385,7 +385,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentPage === "home" && renderHome()}
         {currentPage === "about" && renderAbout()}

@@ -51,9 +51,9 @@ export function PipelineRunner({
   onStagesUpdate,
 }: PipelineRunnerProps) {
   const [stages, setStages] = useState<PipelineStageType[]>([
-    { id: "spec", name: "Specification Generation", status: "pending" },
+    { id: "spec_generation", name: "Specification Generation", status: "pending" },
     {
-      id: "design",
+      id: "netlist_generation",
       name: "Circuit Netlist Pipeline",
       status: "pending",
       subStages: [
@@ -67,15 +67,13 @@ export function PipelineRunner({
       name: "Manufacturing Setup",
       status: "pending",
       subStages: [
-        { id: "placement", name: "Generate placement data", status: "pending" },
-        { id: "machine", name: "Send to pick-and-place", status: "pending" },
-        { id: "verify", name: "Verify machine ready", status: "pending" },
+        { id: "manufacture", name: "Manufacture", status: "pending" },
       ],
     },
   ])
 
   const [isRunning, setIsRunning] = useState(false)
-  const [selectedStageId, setSelectedStageId] = useState<string>("spec")
+  const [selectedStageId, setSelectedStageId] = useState<string>("spec_generation")
   const [pipelineStartTime, setPipelineStartTime] = useState<Date | null>(null)
 
   // NEW: capture start times synchronously to beat React's batching
@@ -263,6 +261,7 @@ export function PipelineRunner({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userInput: messages[0].content,
           conversationContext: messages,
           selectedModel,
           requirements: conversationContext,
@@ -281,12 +280,80 @@ export function PipelineRunner({
         const chunk = decoder.decode(value)
         const lines = chunk.split("\n")
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              handleStreamUpdate(JSON.parse(line.slice(6)))
-            } catch (e) {
-              console.error("Failed to parse stream update:", e)
+          if (!line.startsWith("data: ")) continue
+
+          try {
+            // Parse the SSE payload (and defensively unwrap if double-wrapped)
+            let evt: any = JSON.parse(line.slice(6))
+            if (typeof evt?.payload === "string" && evt.payload.startsWith("data: ")) {
+              evt = JSON.parse(evt.payload.slice(6))
             }
+
+            const type = evt?.type as string | undefined
+
+            if (type === "workflow_started") {
+              const stage = evt.workflow as string
+              handleStreamUpdate({ stage, status: "running" })
+              continue
+            }
+
+            if (type === "workflow_succeeded") {
+              const stage = evt.workflow as string
+              const ctx = evt.context ?? {}
+              const durationMs =
+                typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
+              const tokenCost = {
+                inputTokens: Number(ctx.input_tokens ?? 0),
+                outputTokens: Number(ctx.output_tokens ?? 0),
+                totalTokens: Number(ctx.total_tokens ?? 0),
+                estimatedCost: Number(ctx.cost ?? 0),
+              }
+              let result = evt.result
+              if (result && typeof result === "object") {
+                try {
+                  result = JSON.stringify(result, null, 2)
+                } catch {
+                  // leave as-is
+                }
+              }
+              handleStreamUpdate({ stage, status: "success", result, tokenCost, durationMs })
+              continue
+            }
+
+            if (type === "workflow_failed") {
+              const stage = evt.workflow as string
+              const ctx = evt.context ?? {}
+              const durationMs =
+                typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
+              const tokenCost = {
+                inputTokens: Number(ctx.input_tokens ?? 0),
+                outputTokens: Number(ctx.output_tokens ?? 0),
+                totalTokens: Number(ctx.total_tokens ?? 0),
+                estimatedCost: Number(ctx.cost ?? 0),
+              }
+              handleStreamUpdate({ stage, status: "error", tokenCost, durationMs })
+              continue
+            }
+
+            if (type === "substage_started") {
+              const stage = evt.workflow as string
+              const subStage = evt.substage as string
+              handleStreamUpdate({ stage, subStage, status: "running" })
+              continue
+            }
+
+            if (type === "substage_completed") {
+              const stage = evt.workflow as string
+              const subStage = evt.substage as string
+              handleStreamUpdate({ stage, subStage, status: "success" })
+              continue
+            }
+
+            // Optional: ignore run_* for UI
+            // run_started, run_succeeded, run_failed → no-op
+
+          } catch (e) {
+            console.error("Failed to parse stream update:", e)
           }
         }
       }
@@ -314,7 +381,7 @@ export function PipelineRunner({
         subStages: stage.subStages?.map((sub) => ({ ...sub, status: "pending" as const })),
       })),
     )
-    setSelectedStageId("spec")
+    setSelectedStageId("spec_generation")
     setPipelineStartTime(null)
   }
 
@@ -360,7 +427,7 @@ export function PipelineRunner({
           </div>
         )}
 
-        {settings.showTokenCost && getTotalTokens() > 0 && (
+        {settings.showTokenCost && (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -440,7 +507,6 @@ export function PipelineRunner({
                     ({formatDuration(selectedStage.duration)})
                   </span>
                 )}
-                {/* keep retry UI same as your reference if you use it */}
               </CardTitle>
             </CardHeader>
             <CardContent>

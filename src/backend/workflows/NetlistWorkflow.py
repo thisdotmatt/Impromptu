@@ -1,10 +1,9 @@
-import time
-from typing import Callable, Dict, List, Awaitable
-from datetime import datetime, timezone
 import asyncio
+from datetime import datetime, timezone
+from typing import Awaitable, Dict, List
 
 from agents.NetlistAgent import NetlistAgent
-from utils.types import Status, WorkflowState, EventCallback
+from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
 
 
@@ -17,12 +16,14 @@ class NetlistWorkflow(BaseWorkflow):
         self.agent = NetlistAgent()
         self.tools = tools
 
-    async def run(self, state: WorkflowState, updateCallback: EventCallback, max_retries: int = 1) -> WorkflowState:
+    async def run(
+        self, state: WorkflowState, updateCallback: EventCallback, max_retries: int = 1
+    ) -> WorkflowState:
         if state.context.get("spec_generation_result") == None:
             state.status = Status.ERROR
             state.err_message = f"Error during workflow {state.current_workflow}: missing 'spec' field in state.context"
             return state
-        
+
         workflow_name = state.current_workflow or "netlist_generation"
 
         attempt = 0

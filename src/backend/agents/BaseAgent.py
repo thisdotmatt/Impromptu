@@ -3,6 +3,7 @@ from abc import abstractmethod
 
 from utils.types import AgentResponse
 
+
 class BaseAgent(AbstractBaseClass):
     def __init__(self):
         pass

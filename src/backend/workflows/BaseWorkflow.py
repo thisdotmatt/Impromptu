@@ -2,7 +2,7 @@ from abc import ABC as AbstractBaseClass
 from abc import abstractmethod
 from typing import Awaitable, Dict, List
 
-from utils.types import WorkflowState, EventCallback
+from utils.types import EventCallback, WorkflowState
 
 
 class BaseWorkflow(AbstractBaseClass):
@@ -10,7 +10,9 @@ class BaseWorkflow(AbstractBaseClass):
         self.tools = tools  # deterministic, non-LLM tools
 
     @abstractmethod
-    async def run(self, state: WorkflowState, updateCallback: EventCallback, max_retries: int = 1) -> WorkflowState:
+    async def run(
+        self, state: WorkflowState, updateCallback: EventCallback, max_retries: int = 1
+    ) -> WorkflowState:
         """
         Runs the end-to-end workflow while updating the upstream workflow orchestrator.
         Args:

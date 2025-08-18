@@ -1,8 +1,10 @@
 import time
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Awaitable
+from datetime import datetime, timezone
+import asyncio
 
 from agents.NetlistAgent import NetlistAgent
-from utils.types import Status, WorkflowState
+from utils.types import Status, WorkflowState, EventCallback
 from workflows.BaseWorkflow import BaseWorkflow
 
 
@@ -11,59 +13,111 @@ class NetlistWorkflow(BaseWorkflow):
     Workflow for generating a netlist from an engineering specification and verifying it using external tools
     """
 
-    def __init__(self, tools: Dict[str, List[Callable]] = None):
+    def __init__(self, tools: Dict[str, List[Awaitable]] = None):
         self.agent = NetlistAgent()
         self.tools = tools
 
-    def run(self, state: WorkflowState, max_retries: int = 1) -> WorkflowState:
-        if state.context.get("spec") == None:
+    async def run(self, state: WorkflowState, updateCallback: EventCallback, max_retries: int = 1) -> WorkflowState:
+        if state.context.get("spec_generation_result") == None:
             state.status = Status.ERROR
             state.err_message = f"Error during workflow {state.current_workflow}: missing 'spec' field in state.context"
             return state
+        
+        workflow_name = state.current_workflow or "netlist_generation"
 
         attempt = 0
         while attempt < max_retries:
             attempt += 1
 
+            step_index = 0
+
+            # generate stage
             state.current_stage = "generate"
             state.status = Status.RUNNING
-            prompt = state.context.get("spec")
-            agent_response = self.agent.run(prompt=prompt)
+            step_index += 1
+            await updateCallback(
+                "substage_started",
+                {
+                    "type": "substage_started",
+                    "workflow": workflow_name,
+                    "substage": state.current_stage,
+                    "step_index": step_index,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+
+            prompt = state.context.get("spec_generation_result")
+            agent_response = await self.agent.run(prompt=prompt)
             if agent_response.status == Status.ERROR:
                 state.status = Status.ERROR
                 state.err_message = f"Error during workflow {state.current_workflow} while executing agent: {agent_response.err_message}"
                 return state
 
-            state.context["netlist"] = agent_response.response
+            result_name = f"{workflow_name}_result"
+            state.context[result_name] = agent_response.response
+
+            # generate completed
+            await updateCallback(
+                "substage_completed",
+                {
+                    "type": "substage_completed",
+                    "workflow": workflow_name,
+                    "substage": state.current_stage,
+                    "step_index": step_index,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "meta": {},
+                },
+            )
 
             # run the tools to verify the netlist is correct
             all_tools_passed = True
-            hasTools = len(list(self.tools.keys())) != 0
+            hasTools = self.tools is not None and len(list(self.tools.keys())) != 0
             if hasTools:
                 for tool_name in self.tools:
-                    print(f"Running tool: {tool_name}")
+                    # tool stage
                     state.current_stage = tool_name
                     state.status = Status.RUNNING
+                    step_index += 1
+                    await updateCallback(
+                        "substage_started",
+                        {
+                            "type": "substage_started",
+                            "workflow": workflow_name,
+                            "substage": state.current_stage,
+                            "step_index": step_index,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
 
-                    state = self.tools[tool_name](state)
-                    print(f"Status for tool {tool_name}: {state.status}")
+                    state = await self.tools[tool_name](state)
 
                     if state.status == Status.ERROR:
                         all_tools_passed = False
                         break
 
+                    await updateCallback(
+                        "substage_completed",
+                        {
+                            "type": "substage_completed",
+                            "workflow": workflow_name,
+                            "substage": state.current_stage,
+                            "step_index": step_index,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                            "meta": {},
+                        },
+                    )
+
             if all_tools_passed:  # else retry/fail
                 state.status = Status.SUCCESS
                 return state
 
-        print("GOT TO HERE")
         state.status = Status.ERROR
         state.err_message = f"Error during workflow {state.current_workflow} while running stage {state.current_stage}: {state.err_message}"
         return state
 
 
-def simulate_tool(state: WorkflowState):
-    time.sleep(1)
+async def simulate_tool(state: WorkflowState):
+    await asyncio.sleep(0.5)
     if state.context.get(
         "fail_simulation", False
     ):  # sneaky way to allow us to test this by forcing it to fail
@@ -74,8 +128,8 @@ def simulate_tool(state: WorkflowState):
     return state
 
 
-def verify_tool(state: WorkflowState):
-    time.sleep(1)
+async def verify_tool(state: WorkflowState):
+    await asyncio.sleep(0.5)
     if state.context.get(
         "fail_verification", False
     ):  # sneaky way to allow us to test this by forcing it to fail

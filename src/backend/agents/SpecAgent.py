@@ -1,4 +1,4 @@
-from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM
+from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM, components
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from models.OpenAIModel import OpenAIModel
@@ -25,7 +25,7 @@ class SpecAgent(BaseAgent):
             }
         )
 
-    def run(self, prompt: str) -> AgentResponse:
+    async def run(self, prompt: str) -> AgentResponse:
         if USE_MOCK_LLM:
             mock_response = AgentResponse(response=self._mock(prompt), status=Status.SUCCESS)
             return mock_response
@@ -36,14 +36,13 @@ class SpecAgent(BaseAgent):
         # parse the generated text in JSON format
         llm = OpenAIModel().getModel()
         prompt_template = PromptTemplate(
-            template=SPEC_GENERATION_PROMPT, input_variables=["user_prompt"]
+            template=SPEC_GENERATION_PROMPT, input_variables=["user_prompt", "components"]
         )
-        print("Specification prompt: ", prompt_template)
         parser = JsonOutputParser()
         chain = prompt_template | llm | parser
 
         try:
-            generated_spec = chain.invoke({"user_prompt": prompt})
+            generated_spec = chain.invoke({"user_prompt": prompt, "components": components})
         except RateLimitError as e:  # ask matt to buy more OpenAI credits
             err_message = f"OpenAI quota exceeded with message: {e}"
             print("RateLimitError:", e)

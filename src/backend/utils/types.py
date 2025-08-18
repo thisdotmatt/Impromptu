@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, TypedDict, Optional, Callable, Any, Awaitable, List
 
+sse_headers = {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+    }
+
+EventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
 
 class Status(Enum):
     PENDING = "pending"
@@ -60,6 +68,8 @@ class WorkflowState:
         self.workflows_context = workflows_context or {}
 
 
-class Event:
-    def __init__(self):
-        pass
+class Event(TypedDict):
+    workflow_names: List[str]
+    status: Status
+    err_message: str
+    

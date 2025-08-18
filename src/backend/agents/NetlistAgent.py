@@ -1,4 +1,4 @@
-from config import NETLIST_GENERATION_PROMPT, USE_MOCK_LLM
+from config import NETLIST_GENERATION_PROMPT, USE_MOCK_LLM, components
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from models.OpenAIModel import OpenAIModel
@@ -19,7 +19,7 @@ class NetlistAgent(BaseAgent):
     def _mock(self, prompt: str) -> str:
         return f"* MOCK Netlist for: {prompt}\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 10uF\n.end"
 
-    def run(self, prompt: str) -> AgentResponse:
+    async def run(self, prompt: str) -> AgentResponse:
         if USE_MOCK_LLM:
             mock_response = AgentResponse(response=self._mock(prompt), status=Status.SUCCESS)
             return mock_response
@@ -30,13 +30,13 @@ class NetlistAgent(BaseAgent):
         # parse the generated text in JSON format
         llm = OpenAIModel().getModel()
         prompt_template = PromptTemplate(
-            template=NETLIST_GENERATION_PROMPT, input_variables=["specification"]
+            template=NETLIST_GENERATION_PROMPT, input_variables=["components", "specification"]
         )
         parser = StrOutputParser()
         chain = prompt_template | llm | parser
 
         try:
-            netlist_text = chain.invoke({"specification": prompt})
+            netlist_text = chain.invoke({"components": components, "specification": prompt})
         except RateLimitError as e:
             err_message = f"OpenAI quota exceeded with message: {e}"
             print("RateLimitError:", e)

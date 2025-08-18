@@ -3,7 +3,6 @@ from abc import abstractmethod
 
 from utils.types import AgentResponse
 
-
 class BaseAgent(AbstractBaseClass):
     def __init__(self):
         pass
@@ -21,7 +20,7 @@ class BaseAgent(AbstractBaseClass):
         pass
 
     @abstractmethod
-    def run(self, prompt: str) -> AgentResponse:
+    async def run(self, prompt: str) -> AgentResponse:
         """
         Processes the provided prompt and generates a response with an error message
         This method is designed to be highly customizable, allowing derived agents to implement

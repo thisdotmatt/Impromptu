@@ -52,7 +52,15 @@ cd src/backend
 uv run uvicorn server:app --reload
 ```
 
-Then, start the web app with `npm run dev`. This will start your webapp at `http://localhost:3000/`.
+Then, start the web app with:
+
+```bash
+cd src/frontend
+npm run dev
+```
+
+
+This will start your webapp at `http://localhost:3000/`.
 
 ## 📚 Documentation
 

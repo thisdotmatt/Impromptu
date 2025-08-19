@@ -63,11 +63,11 @@ export function PipelineRunner({
       ],
     },
     {
-      id: "manufacturing",
-      name: "Manufacturing Setup",
+      id: "circuit_to_printer",
+      name: "Circuit-to-Printer",
       status: "pending",
       subStages: [
-        { id: "manufacture", name: "Manufacture", status: "pending" },
+        { id: "circuit_to_printer", name: "Circuit-to-Printer", status: "pending" },
       ],
     },
   ])

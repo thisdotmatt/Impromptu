@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Send, Zap, MessageCircle, Cpu, Factory } from "lucide-react"
 import { TypewriterMessage } from "@/components/typewriter-message"
 import { PipelineRunner } from "@/components/pipeline-runner"
-import { ManufacturingCard } from "@/components/manufacturing-card"
+import { CircuitToPrinter } from "@/components/circuit-to-printer-card"
 import { SettingsDialog, type SettingsType } from "@/components/settings-dialog"
 import { TutorialOverlay } from "@/components/tutorial-overlay"
 import { ScrollIndicator } from "@/components/scroll-indicator"
@@ -278,7 +278,7 @@ export default function Home() {
         />
       </div>
 
-      <ManufacturingCard
+      <CircuitToPrinter
         isSimulationComplete={isDesignComplete()}
         circuitData={null} // You can pass actual circuit data here when available
         settings={settings}

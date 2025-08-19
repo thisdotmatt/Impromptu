@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from utils.helpers import formatSSEMessage
 from utils.types import EventCallback, Status, WorkflowState, sse_headers
-from workflows.ManufacturingWorkflow import ManufacturingWorkflow
+from backend.workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
 
@@ -32,7 +32,6 @@ def getCallback(run_id: str) -> EventCallback:
 
 
 async def orchestrate_workflows(run_id: str, payload: Dict, updateCallback: EventCallback):
-    print("Starting the orchestration of workflows")
     queue = event_queues.setdefault(run_id, asyncio.Queue())
 
     # parse payload (unused at the moment)
@@ -41,17 +40,14 @@ async def orchestrate_workflows(run_id: str, payload: Dict, updateCallback: Even
     selected_model = payload.get("selectedModel") or "gpt-4"
     retry_from_stage = (payload.get("retryFromStage") or "spec_generation").lower()
 
-    print(f"User input found: {user_input}")
-    print(f"Conversation context: {conversation_context}")
-
     # run orchestrator script
     spec_workflow = SpecWorkflow()
     netlist_workflow = NetlistWorkflow(tools={"simulate": simulate_tool, "verify": verify_tool})
-    manufacturing_workflow = ManufacturingWorkflow()
+    circuit_to_printer_workflow = CircuitToPrinterWorkflow()
     workflows = {
         "spec_generation": spec_workflow,
         "netlist_generation": netlist_workflow,
-        "manufacturing": manufacturing_workflow,
+        "circuit_to_printer": circuit_to_printer_workflow,
     }
 
     state = WorkflowState(
@@ -99,16 +95,11 @@ async def chat(request: Request):
       - error (if any)
       - complete (always at end)
     """
-    print("received /chat request")
     body = await request.json()
     messages = body.get("messages") or []
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}, *messages]
     selected_model = "gpt-4o-mini"  # body.get("selectedModel") or "gpt-4o-mini"
     temperature = body.get("temperature") or 0.7
-
-    print("Messages: ", messages)
-    print("Selected Model: ", selected_model)
-
     agent = ChatAgent()
 
     async def getChatMessages():
@@ -127,7 +118,6 @@ async def chat(request: Request):
 @app.post("/create/{run_id}")
 async def create(run_id: str, request: Request):
     payload = await request.json()
-    print("Got to here, creating task")
     updateCallback = getCallback(run_id)
     asyncio.create_task(orchestrate_workflows(run_id, payload, updateCallback))
     return StreamingResponse(event_stream(run_id), headers=sse_headers)

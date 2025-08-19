@@ -41,7 +41,6 @@ class ChatAgent(BaseAgent):
 
         if USE_MOCK_LLM:
             mocked_text = self._mock("").response
-            print("Mocked text: ", mocked_text)
             for piece in mocked_text.split(" "):
                 await asyncio.sleep(0.02)
                 yield {"type": "chunk", "id": msg_id, "delta": piece + " "}

@@ -4,13 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Download, Factory } from "lucide-react"
 
-interface ManufacturingCardProps {
+interface CircuitToPrinterProps {
   isSimulationComplete: boolean
   circuitData?: any
   settings: { showTokenCost: boolean }
 }
 
-export function ManufacturingCard({ isSimulationComplete, circuitData, settings }: ManufacturingCardProps) {
+export function CircuitToPrinter({ isSimulationComplete, circuitData, settings }: CircuitToPrinterProps) {
   const isDesignComplete = isSimulationComplete // This now represents design stage completion
 
   const downloadGcode = () => {

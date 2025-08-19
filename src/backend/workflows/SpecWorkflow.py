@@ -19,10 +19,7 @@ class SpecWorkflow(BaseWorkflow):
             state.err_message = f"Error during workflow {state.current_workflow}: missing 'user_input' field in state.context"
             return state
 
-        if state.memory.get("conversation_context") == None:
-            state.status = Status.ERROR
-            state.err_message = f"Error during workflow {state.current_workflow}: missing 'conversation_context' field in state.memory"
-            return state
+        conversation_context = state.memory.get("conversation_context") or "None"
 
         workflow_name = state.current_workflow or "spec_generation"
         state.current_stage = "generate"
@@ -39,8 +36,7 @@ class SpecWorkflow(BaseWorkflow):
             },
         )
 
-        prompt = f"""High-level request: {state.context.get('user_input')}\nConversation with Electrical Engineering Chatbot: {state.memory.get('conversation_context')}"""
-        print("Specification prompt: ", prompt)
+        prompt = f"""High-level request: {state.context.get('user_input')}\nConversation with Electrical Engineering Chatbot: {conversation_context}"""
         agent_response = await self.agent.run(prompt=prompt)
         if agent_response.status == Status.ERROR:
             state.status = Status.ERROR

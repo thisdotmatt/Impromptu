@@ -2,7 +2,7 @@ import asyncio
 
 from orchestrator.orchestrator import WorkflowOrchestrator
 from utils.types import EventCallback, Status, WorkflowState
-from workflows.ManufacturingWorkflow import ManufacturingWorkflow
+from workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
 
@@ -65,11 +65,11 @@ class Executor:
 if __name__ == "__main__":
     spec_workflow = SpecWorkflow()
     netlist_workflow = NetlistWorkflow(tools={"simulate": simulate_tool, "verify": verify_tool})
-    manufacturing_workflow = ManufacturingWorkflow()
+    circuit_to_printer_workflow = CircuitToPrinterWorkflow()
     workflows = {
         "spec_generation": spec_workflow,
         "netlist_generation": netlist_workflow,
-        "manufacturing": manufacturing_workflow,
+        "circuit_to_printer": circuit_to_printer_workflow,
     }
 
     state = WorkflowState(
@@ -87,7 +87,6 @@ if __name__ == "__main__":
     executor = Executor(state, workflows)
     first_workflow = list(workflows.keys())[0]
     max_retries = 1
-    executor.display()
 
     async def updateCallback(run_type, contents):
         pass

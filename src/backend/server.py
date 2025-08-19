@@ -11,7 +11,7 @@ from utils.types import EventCallback, Status, WorkflowState, sse_headers
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
 
-from backend.workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
+from workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
 
 app = FastAPI(title="Impromptu API")
 

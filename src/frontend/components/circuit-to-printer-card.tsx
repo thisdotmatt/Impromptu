@@ -58,7 +58,7 @@ M30 ; Program end
           <Factory className="h-16 w-16 text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold text-muted-foreground mb-2">Download G-code</h3>
           <p className="text-sm text-muted-foreground text-center">
-            Complete circuit design to download pick-and-place G-code
+            Complete all three stages to download pick-and-place G-code
           </p>
           <Badge variant="secondary" className="mt-3">
             Requires Design Completion

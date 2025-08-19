@@ -186,7 +186,7 @@ export default function Home() {
   }
 
   const isDesignComplete = () => {
-    const designStage = pipelineStages.find((stage) => stage.id === "design")
+    const designStage = pipelineStages.find((stage) => stage.id === "circuit_to_printer")
     return designStage?.status === "success"
   }
 
@@ -280,7 +280,7 @@ export default function Home() {
 
       <CircuitToPrinter
         isSimulationComplete={isDesignComplete()}
-        circuitData={null} // You can pass actual circuit data here when available
+        circuitData={null} // TODO: pass circuit data to final stage
         settings={settings}
       />
 

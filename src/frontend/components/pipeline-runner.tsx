@@ -430,7 +430,7 @@ export function PipelineRunner({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Circuit Design Pipeline</span>
+          <span>Circuit Design Generation</span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={resetPipeline} disabled={isRunning}>
               <RotateCcw className="h-4 w-4 mr-1" />

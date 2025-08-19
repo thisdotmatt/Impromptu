@@ -101,10 +101,7 @@ M30 ; Program end
         <div className="p-3 rounded-lg border bg-green-50 border-green-200">
           <p className="text-sm font-medium mb-2 text-green-800">File Contents:</p>
           <div className="text-sm text-green-700">
-            • 24 component placement coordinates
-            <br />• Pick-and-place machine commands
-            <br />• Estimated assembly time: 3.2 minutes
-            <br />• Compatible with standard G-code machines
+            • WIP: GCode File Contents:/
           </div>
         </div>
       </CardContent>

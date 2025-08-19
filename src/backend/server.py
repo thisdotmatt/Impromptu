@@ -8,9 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from utils.helpers import formatSSEMessage
 from utils.types import EventCallback, Status, WorkflowState, sse_headers
-from backend.workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
+
+from backend.workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
 
 app = FastAPI(title="Impromptu API")
 

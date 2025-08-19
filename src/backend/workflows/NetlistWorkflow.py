@@ -55,7 +55,7 @@ class NetlistWorkflow(BaseWorkflow):
                 return state
 
             result_name = f"{workflow_name}_result"
-            state.context[result_name] = agent_response.response
+            state.context[result_name] = {"netlist": agent_response.response}
 
             # generate completed
             await updateCallback(

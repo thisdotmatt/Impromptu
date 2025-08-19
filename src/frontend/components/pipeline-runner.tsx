@@ -27,7 +27,7 @@ type PipelineStageType = {
   id: string
   name: string
   status: StageStatus
-  result?: string | React.ReactNode
+  result?: Record<string, any>
   subStages?: SubStage[]
   tokenCost?: TokenCost
   startTime?: Date
@@ -181,7 +181,7 @@ export function PipelineRunner({
   const handleStreamUpdate = (update: {
     stage: string
     status: "running" | "success" | "error" | "completed"
-    result?: string | React.ReactNode
+    result?: Record<string, any>
     subStage?: string
     tokenCost?: TokenCost
     startTimeMs?: number
@@ -308,15 +308,22 @@ export function PipelineRunner({
                 totalTokens: Number(ctx.total_tokens ?? 0),
                 estimatedCost: Number(ctx.cost ?? 0),
               }
-              let result = evt.result
-              if (result && typeof result === "object") {
-                try {
-                  result = JSON.stringify(result, null, 2)
-                } catch {
-                  // leave as-is
+              let resultObj: Record<string, any> | undefined
+              const raw = evt.result
+              if (raw != null) {
+                if (typeof raw === "object") {
+                  resultObj = raw as Record<string, any>
+                } else if (typeof raw === "string") {
+                  try {
+                    const parsed = JSON.parse(raw)
+                    resultObj = typeof parsed === "object" && parsed !== null ? parsed : { displayed_result: raw }
+                  } catch {
+                    resultObj = { displayed_result: raw }
+                  }
                 }
               }
-              handleStreamUpdate({ stage, status: "success", result, tokenCost, durationMs })
+
+              handleStreamUpdate({ stage, status: "success", result: resultObj, tokenCost, durationMs })
               continue
             }
 
@@ -331,7 +338,21 @@ export function PipelineRunner({
                 totalTokens: Number(ctx.total_tokens ?? 0),
                 estimatedCost: Number(ctx.cost ?? 0),
               }
-              handleStreamUpdate({ stage, status: "error", tokenCost, durationMs })
+              let resultObj: Record<string, any> | undefined
+              const raw = evt.error ?? evt.result
+              if (raw != null) {
+                if (typeof raw === "object") {
+                  resultObj = raw as Record<string, any>
+                } else if (typeof raw === "string") {
+                  try {
+                    const parsed = JSON.parse(raw)
+                    resultObj = typeof parsed === "object" && parsed !== null ? parsed : { displayed_result: raw }
+                  } catch {
+                    resultObj = { displayed_result: raw }
+                  }
+                }
+              }
+              handleStreamUpdate({ stage, status: "error", result: resultObj, tokenCost, durationMs })
               continue
             }
 
@@ -387,6 +408,23 @@ export function PipelineRunner({
 
   const hasConversation = messages.length > 0
   const selectedStage = stages.find((stage) => stage.id === selectedStageId)
+  const formatResultValues = (res: Record<string, any>) => {
+    const vals = Object.values(res ?? {})
+    if (vals.length === 0) return ""
+    return vals
+      .map((v) => {
+        if (v == null) return ""
+        if (typeof v === "string") return v
+        if (typeof v === "number" || typeof v === "boolean") return String(v)
+        try {
+          return JSON.stringify(v, null, 2)
+        } catch {
+          return String(v)
+        }
+      })
+      .filter(Boolean)
+      .join("\n\n")
+  }
 
   return (
     <Card>
@@ -549,11 +587,12 @@ export function PipelineRunner({
                 </div>
               )}
 
-
               {selectedStage.result ? (
                 <div className="bg-muted/30 rounded p-3">
                   <p className="text-sm font-medium mb-2">Results:</p>
-                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedStage.result}</div>
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {formatResultValues(selectedStage.result)}
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

@@ -23,8 +23,8 @@ class Executor:
 
     def display(self):
         try:
-            generated_spec = self.state.context["spec_generation_result"]
-            generated_netlist = self.state.context["netlist_generation_result"]
+            generated_spec = self.state.context["spec_generation_result"]["spec"]
+            generated_netlist = self.state.context["netlist_generation_result"]["netlist"]
 
             # display allat
 

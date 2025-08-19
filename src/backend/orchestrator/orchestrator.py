@@ -128,6 +128,7 @@ class WorkflowOrchestrator:
                         or workflow_state.context.get(workflow_name)
                         or {}
                     )
+                    print("result: ", result)
 
                     await updateCallback(
                         "workflow_succeeded",

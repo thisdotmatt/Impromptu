@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Dict, List
 
 from utils.types import EventCallback, Status, WorkflowState
+from config import MOCK_GCODE
 from workflows.BaseWorkflow import BaseWorkflow
 
 
@@ -24,9 +25,10 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             },
         )
 
-        # mock processing: tools would be called here
-
+        # TODO: finish this whole verified netlist to routed circuit to GCODE pipeline
         state.status = Status.SUCCESS
+        result_name = f"{workflow_name}_result"
+        state.context[result_name] = {"routing": "No routing available.\n", "gcode": MOCK_GCODE}
 
         await updateCallback(
             "substage_completed",

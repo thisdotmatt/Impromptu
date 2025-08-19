@@ -52,6 +52,24 @@ export default function Home() {
     setShowTutorial(true)
   }
 
+  // lets us retrieve the result of the third and final stage of the orchestrator
+  const GCodeResult = (): string | null => {
+    const getGCode = (stage: any): string | null => {
+      const res = stage?.result
+      if (!res || typeof res !== "object") return null
+      const g = (res as Record<string, any>).gcode
+      if (g == null) return null
+      return typeof g === "string" ? g : JSON.stringify(g)
+    }
+
+    const finalStage = pipelineStages.find(
+      (s) => s.id === "circuit_to_printer" && s.status === "success"
+    )
+    const fromFinal = getGCode(finalStage)
+    if (fromFinal) return fromFinal
+    return getGCode(finalStage)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault()
       if (!input.trim()) return
@@ -280,7 +298,7 @@ export default function Home() {
 
       <CircuitToPrinter
         isSimulationComplete={isDesignComplete()}
-        circuitData={null} // TODO: pass circuit data to final stage
+        circuitData={GCodeResult}
         settings={settings}
       />
 

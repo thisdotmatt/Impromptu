@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from typing import Awaitable, Dict, List
 
-from utils.types import EventCallback, Status, WorkflowState
 from config import MOCK_GCODE
+from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
 
 

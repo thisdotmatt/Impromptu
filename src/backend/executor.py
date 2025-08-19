@@ -30,8 +30,8 @@ class Executor:
 
             print(self.state.current_workflow)
             print(self.state.current_stage)
-            print(self.state.status)
-            print(self.state.err_message)
+            print(f"Final Status: {self.state.status}")
+            print(f"Final Error Message: {'None' if self.state.err_message == '' else self.state.err_message}")
             print(
                 f"Total cost of spec gen: ${self.state.workflows_context['spec_generation'].cost:.5f}"
             )

@@ -28,6 +28,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
         )
 
         # TODO: finish this whole verified netlist to routed circuit to GCODE pipeline
+        model = state.memory.get("selected_model")
         state.status = Status.SUCCESS
         result_name = f"{workflow_name}_result"
         state.context[result_name] = {"routing": "No routing available.\n", "gcode": MOCK_GCODE}

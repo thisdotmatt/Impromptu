@@ -37,7 +37,7 @@ async def orchestrate_workflows(run_id: str, payload: Dict, updateCallback: Even
     # parse payload (unused at the moment)
     user_input = payload.get("userInput") or ""
     conversation_context = payload.get("conversationContext") or ""
-    selected_model = payload.get("selectedModel") or "gpt-4"
+    selected_model = payload.get("selectedModel") or "gpt-5-mini-2025-08-07"
     retry_from_stage = (payload.get("retryFromStage") or "spec_generation").lower()
 
     # run orchestrator script
@@ -98,9 +98,11 @@ async def chat(request: Request):
     body = await request.json()
     messages = body.get("messages") or []
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}, *messages]
-    selected_model = "gpt-4o-mini"  # body.get("selectedModel") or "gpt-4o-mini"
+    selected_model = body.get("selectedModel") or "gpt-5-mini-2025-08-07"
     temperature = body.get("temperature") or 0.7
     agent = ChatAgent()
+    
+    print(f"MODEL SELECTED: {selected_model}")
 
     async def getChatMessages():
         try:

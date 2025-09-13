@@ -37,7 +37,8 @@ class SpecWorkflow(BaseWorkflow):
         )
 
         prompt = f"""High-level request: {state.context.get("user_input")}\nConversation with Electrical Engineering Chatbot: {conversation_context}"""
-        agent_response = await self.agent.run(prompt=prompt)
+        model = state.memory.get("selected_model")
+        agent_response = await self.agent.run(model=model, prompt=prompt)
         if agent_response.status == Status.ERROR:
             state.status = Status.ERROR
             state.err_message = f"Error during workflow {state.current_workflow} while executing agent: {agent_response.err_message}"

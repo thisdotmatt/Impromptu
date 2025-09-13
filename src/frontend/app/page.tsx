@@ -29,7 +29,7 @@ export default function Home() {
   const [showTutorial, setShowTutorial] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [selectedModel, setSelectedModel] = useState("gpt-4")
+  const [selectedModel, setSelectedModel] = useState("gpt-5-mini-2025-08-07") // default to cheap version
   const [isLoading, setIsLoading] = useState(false)
   const [settings, setSettings] = useState<SettingsType>({
     showTokenCost: false,
@@ -259,10 +259,10 @@ export default function Home() {
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gpt-4">GPT-4</SelectItem>
-                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                  <SelectItem value="claude-3">Claude 3</SelectItem>
-                  <SelectItem value="llama-2">Llama 2</SelectItem>
+                  <SelectItem value="gpt-5-mini-2025-08-07">GPT-5 Mini</SelectItem>
+                  <SelectItem value="gpt-5-nano-2025-08-07">GPT-5 Nano</SelectItem>
+                  <SelectItem value="gpt-4o-mini-2024-07-18">GPT-4o Mini</SelectItem>
+                  <SelectItem value="gpt-5-2025-08-07">GPT-5</SelectItem>
                 </SelectContent>
               </Select>
 

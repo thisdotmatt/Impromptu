@@ -1,6 +1,6 @@
 MAX_RUN_COST = 0.001  # in USD
 MAX_RETRIES = 1
-USE_MOCK_LLM = True
+USE_MOCK_LLM = False
 
 components = """
 NE555 x4

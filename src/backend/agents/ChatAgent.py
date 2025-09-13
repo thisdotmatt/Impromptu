@@ -24,7 +24,7 @@ class ChatAgent(BaseAgent):
             status=Status.SUCCESS,
         )
 
-    async def run(self, prompt: str) -> AgentResponse:
+    async def run(self: str, prompt: str) -> AgentResponse:
         pass
 
     # TODO: consolidate the base agent class to support passing model info and better handle config

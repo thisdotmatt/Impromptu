@@ -21,7 +21,7 @@ class BaseAgent(AbstractBaseClass):
         pass
 
     @abstractmethod
-    async def run(self, prompt: str) -> AgentResponse:
+    async def run(self, model: str, prompt: str) -> AgentResponse:
         """
         Processes the provided prompt and generates a response with an error message
         This method is designed to be highly customizable, allowing derived agents to implement

@@ -25,7 +25,7 @@ class SpecAgent(BaseAgent):
             }
         )
 
-    async def run(self, prompt: str) -> AgentResponse:
+    async def run(self, model: str, prompt: str) -> AgentResponse:
         if USE_MOCK_LLM:
             mock_response = AgentResponse(response=self._mock(prompt), status=Status.SUCCESS)
             return mock_response
@@ -34,7 +34,7 @@ class SpecAgent(BaseAgent):
         # we create a prompt template with the prompt and whatever input variables
         # we'd like to add in (e.g. context). Then we pass the result to our LLM, and then
         # parse the generated text in JSON format
-        llm = OpenAIModel().getModel()
+        llm = OpenAIModel(model).getModel()
         prompt_template = PromptTemplate(
             template=SPEC_GENERATION_PROMPT, input_variables=["user_prompt", "components"]
         )

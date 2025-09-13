@@ -48,7 +48,8 @@ class NetlistWorkflow(BaseWorkflow):
             )
 
             prompt = state.context.get("spec_generation_result")
-            agent_response = await self.agent.run(prompt=prompt)
+            model = state.memory.get("selected_model")
+            agent_response = await self.agent.run(model=model, prompt=prompt)
             if agent_response.status == Status.ERROR:
                 state.status = Status.ERROR
                 state.err_message = f"Error during workflow {state.current_workflow} while executing agent: {agent_response.err_message}"

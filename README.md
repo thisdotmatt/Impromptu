@@ -40,7 +40,9 @@ Make sure to restart your IDE after doing this. You can verify this has worked b
 
 You'll also want to turn off USE_MOCK_LLM, which allows developers to test the system without using API credits (mocks the output of each workflow). You can find the configeration in [config.py](./src/backend/config.py).
 
-4. That's it! From here, you have two ways of running Imprompt - terminal-based and web-based. To run the terminal application:
+4. Our circuit generation script requires LTSpice to be installed - place the path of the LTSpice executable in the config file.
+
+5. That's it! From here, you have two ways of running Impromptu - terminal-based and web-based. To run the terminal application:
 
 ```bash
 cd src/backend

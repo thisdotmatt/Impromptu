@@ -1,0 +1,6 @@
+* netlist generated from spicelib
+V1 N001 0 SINE(0 2 1000)
+R1 N002 N001 10
+C1 N002 N003 1uF
+L1 N003 0 10mH
+.end

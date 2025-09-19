@@ -1,0 +1,4 @@
+* netlist generated from spicelib
+V1 N001 0 50
+R1 N001 0 5
+.end

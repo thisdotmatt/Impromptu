@@ -1,11 +1,10 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Awaitable, Dict, List
 
 from config import MOCK_GCODE
 from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
-import time
-import asyncio
 
 
 class CircuitToPrinterWorkflow(BaseWorkflow):
@@ -32,7 +31,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
         state.status = Status.SUCCESS
         result_name = f"{workflow_name}_result"
         state.context[result_name] = {"routing": "No routing available.\n", "gcode": MOCK_GCODE}
-        await asyncio.sleep(1) # TODO: remove
+        await asyncio.sleep(1)  # TODO: remove
 
         await updateCallback(
             "substage_completed",

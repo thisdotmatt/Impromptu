@@ -1,11 +1,10 @@
+from agents.BaseAgent import BaseAgent
 from config import SPEC_GENERATION_PROMPT, USE_MOCK_LLM, components
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from models.OpenAIModel import OpenAIModel
 from openai import OpenAIError, RateLimitError
 from utils.types import AgentResponse, Status
-
-from agents.BaseAgent import BaseAgent
 
 
 class SpecAgent(BaseAgent):

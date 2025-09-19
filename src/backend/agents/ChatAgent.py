@@ -3,11 +3,10 @@ import time
 import uuid
 from typing import Any, AsyncGenerator, Dict, List
 
+from agents.BaseAgent import BaseAgent
 from config import USE_MOCK_LLM
 from models.OpenAIModel import OpenAIModel
 from utils.types import AgentResponse, Status
-
-from agents.BaseAgent import BaseAgent
 
 
 class ChatAgent(BaseAgent):

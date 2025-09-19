@@ -2,7 +2,6 @@ from typing import AsyncGenerator, Dict, List
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-
 from models.BaseModel import BaseModel
 
 

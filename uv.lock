@@ -584,6 +584,18 @@ wheels = [
 ]
 
 [[package]]
+name = "freerouting-client"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/11/ac2cf90077ff3a6b36a1ca9e58915cd543ce23ebd8f56cc8e8919b46834b/freerouting_client-2.1.1.tar.gz", hash = "sha256:91aa81280612f8f0964f3612483dca2a7c52d7ae6b9acc4888dc4d9aaf48459c", size = 13881, upload-time = "2025-04-12T15:02:45.805Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/47/6822057962f7a915492507a64920426881c202442cfc05bffc8d128e3f0c/freerouting_client-2.1.1-py3-none-any.whl", hash = "sha256:033df1831ce1bdf900097c5e1c8da0e4ced54a2328497493106048f27ad6e2af", size = 10190, upload-time = "2025-04-12T15:02:44.97Z" },
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -789,6 +801,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "freerouting-client" },
     { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-community" },
@@ -813,6 +826,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
+    { name = "freerouting-client", specifier = ">=2.1.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-community", specifier = ">=0.3.27" },

@@ -37,7 +37,7 @@ async def orchestrate_workflows(run_id: str, payload: Dict, updateCallback: Even
     # parse payload (unused at the moment)
     user_input = payload.get("userInput") or ""
     conversation_context = payload.get("conversationContext") or ""
-    selected_model = payload.get("selectedModel") or "gpt-5-mini-2025-08-07"
+    selected_model = payload.get("selectedModel") or "gpt-5"
     retry_from_stage = (payload.get("retryFromStage") or "spec_generation").lower()
 
     # run orchestrator script
@@ -98,7 +98,7 @@ async def chat(request: Request):
     body = await request.json()
     messages = body.get("messages") or []
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}, *messages]
-    selected_model = body.get("selectedModel") or "gpt-5-mini-2025-08-07"
+    selected_model = body.get("selectedModel") or "gpt-5-2025-08-07"
     temperature = body.get("temperature") or 0.7
     agent = ChatAgent()
 
@@ -107,6 +107,7 @@ async def chat(request: Request):
     async def getChatMessages():
         try:
             async for evt in agent.stream(messages, selected_model, temperature):
+                print(evt)
                 yield formatSSEMessage(evt)
         except Exception as e:
             print("Failed with exception: ", e)

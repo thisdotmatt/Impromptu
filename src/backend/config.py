@@ -1,3 +1,5 @@
+LTSPICE_PATH = "C:\\Users\\mgrim\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe"  # replace with your LTSpice path
+
 MAX_RUN_COST = 0.001  # in USD
 MAX_RETRIES = 1
 USE_MOCK_LLM = False
@@ -45,18 +47,20 @@ Specification:
 
 Guidelines:
 - Output only the SPICE netlist in plain text (no explanations, no code fences).
-- Ensure the netlist is compatible with Ngspice / PySpice.
-- Include all necessary component values, models, and connections.
+- Your netlist should reflect one circuit and one circuit only defined by the spec
+- Include all specified component values, models, and connections.
 - If the circuit requires a power source, define it explicitly.
 - Use standard node naming (0 for ground).
 - Assume standard component models unless otherwise stated.
+- Assume simulation is handled elsewhere: do not include tran, op, etc.
+- Do not use white spaces in-between lines
 
 Output format:
 <valid SPICE netlist>
 """
 
 CHAT_SYSTEM_PROMPT = """
-You are a senior electrical engineer. You give very brief, direct responses, and ask questions that help your customers identify their business needs. 
+You are a senior electrical engineer. You give very concise, direct responses, and ask questions that help your customers identify their business needs. 
 Allow the customer to take the lead and explain what they want - only step in if they have questions or if you need clarification.
 If you find the customer doesn't really seem to need your help, be willing to ask for further questions and if they have none, stop.
 """

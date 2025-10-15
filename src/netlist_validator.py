@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 from spicelib import RawRead, SimRunner, SpiceEditor
 from spicelib.log.ltsteps import LTSpiceLogReader
 from spicelib.simulators.ltspice_simulator import LTspice
+from backend.config import LTSPICE_PATH
 
 from backend.utils.helpers import checkTracesUnderMaxCurrent, checkTracesUnderMaxVoltage
 
 editor = SpiceEditor("rc_test.net", create_blank=True)
-ltspice_path = "C:\\Users\\mgrim\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspice.exe"  # replace with your LTSpice path
 netlist_path = ".\\test_short.net"
 
 with open(netlist_path, "r") as f:
@@ -27,7 +27,7 @@ editor.add_instruction(".end")
 print(f"Netlist: {editor.netlist}")
 
 runner = SimRunner(
-    simulator=LTspice.create_from(ltspice_path), verbose=True, output_folder="./spice_runs"
+    simulator=LTspice.create_from(LTSPICE_PATH), verbose=True, output_folder="./spice_runs"
 )
 raw_path, log_path = runner.run_now(netlist=editor, exe_log=True, run_filename="rc_run.net")
 print("RAW:", raw_path, "LOG:", log_path)

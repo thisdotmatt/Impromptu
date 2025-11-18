@@ -1,0 +1,12 @@
+../Test_PCB_Routing.ses
+breadboard.png
+netlist_validator.py
+parallel_example.png
+placement_and_routing.py
+pnr2.py
+pnr3.py
+pnr4.py
+series.png
+series_parallel_example.png
+spice_runs/
+test.net

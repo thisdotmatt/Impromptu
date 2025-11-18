@@ -1,10 +1,239 @@
+import os
 import asyncio
 from datetime import datetime, timezone
-from typing import Awaitable, Dict, List
+from typing import Awaitable, Dict, List, Tuple
+
+from spicelib import SpiceEditor
 
 from config import MOCK_GCODE
 from utils.types import EventCallback, Status, WorkflowState
+from utils.helpers import Breadboard, Net, Passive, PnR, renderBreadboard, Dbg
 from workflows.BaseWorkflow import BaseWorkflow
+
+
+# ---- Placement defaults (tweak as needed) -----------------------------------
+COMPONENT_DEFAULTS = {
+    "R":   {"length": 3, "orientation": "v"},
+    "C":   {"length": 3, "orientation": "v"},
+    "L":   {"length": 3, "orientation": "v"},
+    "D":   {"length": 3, "orientation": "v"}, 
+    "LED": {"length": 3, "orientation": "v"},
+}
+# -----------------------------------------------------------------------------
+
+
+def _parse_models_and_instances(netlist_path: str) -> Tuple[set, Dict[str, str]]:
+    """
+    Light-weight text parse to:
+      - collect diode model names that look like LEDs (model name contains 'LED')
+      - map diode instance -> model name
+    """
+    led_models = set()
+    diode_inst_to_model: Dict[str, str] = {}
+
+    with open(netlist_path, "r") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("*"):
+                continue
+
+            low = line.lower()
+
+            # .model DLED D ( ... )
+            if low.startswith(".model"):
+                toks = line.split()
+                if len(toks) >= 3:
+                    model_name = toks[1]
+                    model_kind = toks[2].upper()
+                    # Treat diode models whose names contain 'LED' as LED footprints
+                    if model_kind.startswith("D") and ("LED" in model_name.upper()):
+                        led_models.add(model_name)
+
+            # D1 n+ n- MODEL ...
+            elif line[0].upper() == "D":
+                toks = line.split()
+                if len(toks) >= 4:
+                    ref = toks[0]
+                    model = toks[3]
+                    diode_inst_to_model[ref] = model
+
+    return led_models, diode_inst_to_model
+
+
+def _detect_single_supply(editor: SpiceEditor) -> str:
+    """
+    Returns the net name that should be treated as V+ (if any).
+    We look for a voltage source whose negative terminal is '0' (ground).
+    """
+    vplus = None
+    for ref in editor.get_components():
+        if ref.upper().startswith(("V",)):  # DC/AC voltage source
+            try:
+                nodes = editor.get_component_nodes(ref)
+            except Exception:
+                continue
+            if len(nodes) >= 2:
+                pos, neg = nodes[0], nodes[1]
+                if neg == "0":
+                    vplus = pos
+                    break
+    return vplus
+
+
+def _node_alias_fn(vplus_net: str):
+    """
+    Returns a function that maps raw SPICE nets → ('V+', 'GND', or raw intermediate).
+    """
+    def alias(n: str) -> str:
+        if n == "0" or n.upper() == "GND":
+            return "GND"
+        if vplus_net and n == vplus_net:
+            return "V+"
+        return n
+    return alias
+
+
+def _compact_internal_nets(bindings_raw: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+    """
+    Renames all non-rail nets to N1, N2, ... to match breadboard expectations.
+    """
+    mapping: Dict[str, str] = {}
+    next_idx = 1
+
+    def rename(n: str) -> str:
+        nonlocal next_idx
+        if n in ("V+", "GND"):
+            return n
+        if n not in mapping:
+            mapping[n] = f"N{next_idx}"
+            next_idx += 1
+        return mapping[n]
+
+    bindings: Dict[str, Tuple[str, str]] = {}
+    for k, (a, b) in bindings_raw.items():
+        bindings[k] = (rename(a), rename(b))
+
+    print("Renamed nets:", mapping)
+    return bindings
+
+
+def _make_passives_from_names(part_names: List[str]) -> List[Passive]:
+    """
+    Create Passive objects with defaults, interpreting names like 'LED' specially.
+    """
+    comps: List[Passive] = []
+    for name in part_names:
+        # Choose defaults key
+        key = "".join([c for c in name if not c.isdigit()]).upper()
+        if key.startswith("LED"):
+            key = "LED"
+        elif key:  # take first letter for generic families like R, C, L, D
+            key = key[0]
+        else:
+            key = "R"
+
+        meta = COMPONENT_DEFAULTS.get(key, {"length": 3, "orientation": "v"})
+        comps.append(Passive(name, length=meta["length"], orientation=meta["orientation"]))
+    return comps
+
+
+def netlist_to_pnr_inputs(netlist_path: str):
+    """
+    Core translation:
+      SPICE netlist  →  (nets: Dict[str, Net], comps: List[Passive], bindings: Dict[str, (n1,n2)])
+    Rules:
+      - detect single-supply V+ (positive of any V* tied to '0')
+      - GND := '0'
+      - passives = R*, C*, L*, D* (diodes with LED model become 'LED', others remain 'D#')
+      - skip sources (V*/I*)
+      - compact internal nets to N1, N2, ...
+    """
+    if not os.path.exists(netlist_path):
+        raise FileNotFoundError(f"Netlist not found at {netlist_path}")
+
+    editor = SpiceEditor(netlist_path)
+
+    # Identify rails
+    vplus_net = _detect_single_supply(editor)
+    alias = _node_alias_fn(vplus_net)
+
+    # LED detection (simple heuristic via .model name)
+    led_models, diode_inst_to_model = _parse_models_and_instances(netlist_path)
+
+    entries = []  # list of (base_name, a, b)
+    for ref in editor.get_components():
+        uref = ref.upper()
+        if uref.startswith(("V", "I")):
+            continue
+        try:
+            nodes = editor.get_component_nodes(ref)
+        except Exception:
+            continue
+        if len(nodes) < 2:
+            continue
+
+        a, b = alias(nodes[0]), alias(nodes[1])
+
+        # If diode with LED model, use 'LED' as base label; else keep reference name
+        base = ref
+        if uref.startswith("D"):
+            model = diode_inst_to_model.get(ref, "")
+            if model and (model in led_models or "LED" in model.upper()):
+                base = "LED"
+
+        entries.append((base, a, b))
+
+    # (2) compact internal nets to N1, N2, ... but DO NOT lose multiple parts
+    def _compact(n):
+        if n in ("V+", "GND"):
+            return n
+        if n not in mapping:
+            mapping[n] = f"N{len(mapping)+1}"
+        return mapping[n]
+
+    mapping = {}
+    compacted_entries = [(base, _compact(a), _compact(b)) for base, a, b in entries]
+    print("Renamed nets:", mapping)
+
+    # (3) disambiguate names and build final component list
+    name_counts = {}
+    final_names = []
+    final_bindings = {}  # component -> (a,b) still OK for display/logging
+
+    for base, a, b in compacted_entries:
+        idx = name_counts.get(base, 0)
+        name_counts[base] = idx + 1
+        name = base if idx == 0 else f"{base}{idx}"
+        final_names.append(name)
+        final_bindings[name] = (a, b)
+
+    # (4) create Passives
+    comps = _make_passives_from_names(final_names)
+
+    # (5) BUILD **PIN-LEVEL** BINDINGS for the new PnR
+    pin_bindings = {f"{n}.A": a for n, (a, b) in final_bindings.items()}
+    pin_bindings.update({f"{n}.B": b for n, (a, b) in final_bindings.items()})
+
+    # (6) build nets dict for internal nets only
+    internal = set()
+    for a, b in final_bindings.values():
+        if a not in ("V+", "GND"):
+            internal.add(a)
+        if b not in ("V+", "GND"):
+            internal.add(b)
+    nets = {n: Net(n) for n in sorted(internal)}
+
+    # debug prints
+    try:
+        print("Components (final):", final_names)
+        print("Bindings (component-level):", final_bindings)
+        print("Bindings (pin-level):", pin_bindings)
+        print("Internal nets:", list(nets.keys()))
+    except Exception:
+        pass
+
+    # IMPORTANT: return pin_bindings (not component-level)
+    return nets, comps, pin_bindings
 
 
 class CircuitToPrinterWorkflow(BaseWorkflow):
@@ -26,18 +255,61 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             },
         )
 
-        # TODO: finish this whole verified netlist to routed circuit to GCODE pipeline
-        model = state.memory.get("selected_model")
-        state.status = Status.SUCCESS
-        result_name = f"{workflow_name}_result"
-        state.context[result_name] = {"routing": "No routing available.\n", "gcode": MOCK_GCODE}
-        await asyncio.sleep(1)  # TODO: remove
+        try:
+            netlist_info = state.context.get("netlist_generation_result")
+            if not netlist_info or "netlist" not in netlist_info:
+                raise ValueError("Missing netlist in context for CircuitToPrinterWorkflow")
+
+            # Persist the netlist for parsing
+            netlist_str = netlist_info["netlist"]
+            out_dir = "./spice_runs"
+            os.makedirs(out_dir, exist_ok=True)
+            netlist_path = os.path.join(out_dir, "current_netlist.net")
+            with open(netlist_path, "w") as f:
+                f.write(netlist_str)
+
+            # Convert SPICE → PnR inputs
+            nets, comps, bindings = netlist_to_pnr_inputs(netlist_path)
+
+            # Breadboard & PnR
+            dbg = Dbg(on=True)
+            bb = Breadboard(rows=30, wire_lengths=(1, 3, 5)) 
+            pnr = PnR(bb, nets, comps, dbg=dbg)
+
+            ok = pnr.placeAndRoute(bindings)
+            sol = pnr.solution()
+
+            # Routing report
+            routing_txt = [
+                f"Placement & Routing {'SUCCESS' if (ok and sol.get('ok')) else 'FAILED'}\n",
+                "Components:\n",
+            ]
+            for k, v in sol.get("components", {}).items():
+                routing_txt.append(f"{k}: {v}\n")
+            routing_txt.append("Wires:\n")
+            for w in sol.get("wires", []):
+                routing_txt.append(f"{w}\n")
+            routing_summary = "".join(routing_txt)
+
+            # Render
+            renderBreadboard(sol, bb, filename="breadboard.png", show=False, title="PnR Result")
+
+            # Store results
+            result_name = f"{workflow_name}_result"
+            state.context[result_name] = {"routing": routing_summary, "gcode": MOCK_GCODE}
+            state.status = Status.SUCCESS
+
+        except Exception as e:
+            state.status = Status.ERROR
+            state.err_message = f"CircuitToPrinter failed: {e}"
+
+        await asyncio.sleep(1)  # optional
 
         await updateCallback(
             "substage_completed",
             {
                 "type": "substage_completed",
-                "workflow": state.current_workflow or "circuit_to_printer",
+                "workflow": workflow_name,
                 "substage": "circuit_to_printer",
                 "step_index": 1,
                 "ts": datetime.now(timezone.utc).isoformat(),

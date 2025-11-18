@@ -1,5 +1,5 @@
 from agents.BaseAgent import BaseAgent
-from config import NETLIST_GENERATION_PROMPT, USE_MOCK_LLM, components
+from config import NETLIST_GENERATION_PROMPT, MOCK_NETLIST, USE_MOCK_LLM, components
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from models.OpenAIModel import OpenAIModel
@@ -16,7 +16,15 @@ class NetlistAgent(BaseAgent):
     """
 
     def _mock(self, prompt: str) -> str:
-        return f"* MOCK Netlist for: {prompt}\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 10uF\n.end"
+        return MOCK_NETLIST
+        # return (
+        #     "* LED with resistor and 5V source\n"
+        #     "V1 N001 0 DC 5\n"
+        #     "R1 N001 N002 330\n"
+        #     "D1 N002 0 DLED\n"
+        #     ".model DLED D (IS=1e-14 N=1.7 BV=100 IBV=0.1 CJO=10p RS=10 TT=1u)\n"
+        #     ".end"
+        # )
 
     async def run(self, model: str, prompt: str) -> AgentResponse:
         if USE_MOCK_LLM:

@@ -56,10 +56,10 @@ class Executor:
                 self.state.workflows_context["netlist_generation"].duration_ns / (1_000_000),
                 "ms",
             )
-            print("GENERATED SPECIFICATION: ")
-            print(generated_spec)
-            print("GENERATED NETLIST: ")
-            print(generated_netlist)
+            #print("GENERATED SPECIFICATION: ")
+            #print(generated_spec)
+            #print("GENERATED NETLIST: ")
+            #print(generated_netlist)
         except Exception as e:
             print(f"Failed to display with exception: {e}")
 

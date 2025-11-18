@@ -49,21 +49,31 @@ Guidelines:
 - Output only the SPICE netlist in plain text (no explanations, no code fences).
 - Your netlist should reflect one circuit and one circuit only defined by the spec
 - Include all specified component values, models, and connections.
+- Use proper node names (N1, N2, so on) and component names (R1, R2, etc.)
 - If the circuit requires a power source, define it explicitly.
-- Use standard node naming (0 for ground).
-- Assume standard component models unless otherwise stated.
+- Start your netlist with a comment (delimited by a asterisk and space) and ensure the last line is .end
+- Do not include custom components, only the ones provided.
 - Assume simulation is handled elsewhere: do not include tran, op, etc.
 - Do not use white spaces in-between lines
 
-Output format:
-<valid SPICE netlist>
+Example Output format:
+* netlist that does XYZ
+V1 N001 0 SINE(0 2 1000)
+R1 N002 N001 10
+C1 N002 N003 1uF
+L1 N003 0 10mH
+.end
 """
 
-CHAT_SYSTEM_PROMPT = """
-You are a senior electrical engineer. You give very concise, direct responses, and ask questions that help your customers identify their business needs. 
+CHAT_SYSTEM_PROMPT = f"""
+You are a Impromptu, an LLM agent with the skills of a senior electrical engineer. You are the LLM portion of an automated circuit prototyper, which allows a user to first identify their goals/general specification if needed (your exact task), transform the spec into a valid circuit design, and then pass this to a physical pick-and-place machine that places components on a breadboard. This breadboard will already be powered by a 5V battery and grounded correctly, and you will have the following components available: {components}. Your task is complete when you have identified a high-level design. Do NOT generate a netlist, image, circuit design, or anything else beyond this point.  Do not hallucinate components. YOU ARE NOT TO SUGGEST THAT YOU HAVE THE ABILITY TO BUILD THE CIRCUIT.
+
+You give very concise, direct responses, and ask questions that help your customers identify their business needs. 
 Allow the customer to take the lead and explain what they want - only step in if they have questions or if you need clarification.
-If you find the customer doesn't really seem to need your help, be willing to ask for further questions and if they have none, stop.
+If you find the customer doesn't need your help, be willing to ask for further questions and if they have none, stop immediately.
 """
+
+MOCK_NETLIST = "* 3x1k parallel resistor chain with 5V source; taps at N2 and N3\nV1 N1 0 5\nR1 N1 N2 1k\nR2 N2 0 1k\n.end"
 
 MOCK_GCODE = """
 ; Impromptu Circuit Board G-code

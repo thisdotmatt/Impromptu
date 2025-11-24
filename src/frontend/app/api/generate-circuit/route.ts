@@ -2,11 +2,10 @@ import type { NextRequest } from "next/server"
 
 export const runtime = "nodejs"
 
-// proxy for server.py, keeps CORS really simple
 export async function POST(req: NextRequest) {
   const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000"
   const payload = await req.json()
-  const run_id = 1;
+  const run_id = 1
 
   const resp = await fetch(`${BACKEND_URL}/create/${run_id}`, {
     method: "POST",
@@ -20,11 +19,15 @@ export async function POST(req: NextRequest) {
     return new Response(text, { status: resp.status })
   }
 
+  // Forward backend headers and force SSE-compatible headers
+  const headers = new Headers(resp.headers)
+  headers.set("Cache-Control", "no-cache")
+  headers.set("Connection", "keep-alive")
+  headers.set("Content-Type", "text/event-stream; charset=utf-8")
+
   return new Response(resp.body, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
+    status: resp.status,
+    statusText: resp.statusText,
+    headers,
   })
 }

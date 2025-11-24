@@ -2,6 +2,7 @@ import os
 import asyncio
 from datetime import datetime, timezone
 from typing import Awaitable, Dict, List, Tuple
+import traceback
 
 from spicelib import SpiceEditor
 
@@ -67,7 +68,7 @@ def _detect_single_supply(editor: SpiceEditor) -> str:
     """
     vplus = None
     for ref in editor.get_components():
-        if ref.upper().startswith(("V",)):  # DC/AC voltage source
+        if ref.upper().startswith(("V",)):
             try:
                 nodes = editor.get_component_nodes(ref)
             except Exception:
@@ -155,10 +156,12 @@ def netlist_to_pnr_inputs(netlist_path: str):
 
     # Identify rails
     vplus_net = _detect_single_supply(editor)
+    print(f"[DEBUG] Detected V+ net: {vplus_net}")
     alias = _node_alias_fn(vplus_net)
 
     # LED detection (simple heuristic via .model name)
     led_models, diode_inst_to_model = _parse_models_and_instances(netlist_path)
+    print(f"[DEBUG] LED models: {led_models}, Diode instances: {diode_inst_to_model}")
 
     entries = []  # list of (base_name, a, b)
     for ref in editor.get_components():
@@ -167,7 +170,8 @@ def netlist_to_pnr_inputs(netlist_path: str):
             continue
         try:
             nodes = editor.get_component_nodes(ref)
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] Failed to get nodes for {ref}: {e}")
             continue
         if len(nodes) < 2:
             continue
@@ -182,8 +186,9 @@ def netlist_to_pnr_inputs(netlist_path: str):
                 base = "LED"
 
         entries.append((base, a, b))
+        print(f"[DEBUG] Entry: {ref} -> {base}: {a} -> {b}")
 
-    # (2) compact internal nets to N1, N2, ... but DO NOT lose multiple parts
+    # Compact internal nets to N1, N2, ...
     def _compact(n):
         if n in ("V+", "GND"):
             return n
@@ -193,12 +198,12 @@ def netlist_to_pnr_inputs(netlist_path: str):
 
     mapping = {}
     compacted_entries = [(base, _compact(a), _compact(b)) for base, a, b in entries]
-    print("Renamed nets:", mapping)
+    print("[DEBUG] Renamed nets:", mapping)
 
-    # (3) disambiguate names and build final component list
+    # Disambiguate names and build final component list
     name_counts = {}
     final_names = []
-    final_bindings = {}  # component -> (a,b) still OK for display/logging
+    final_bindings = {}
 
     for base, a, b in compacted_entries:
         idx = name_counts.get(base, 0)
@@ -207,14 +212,11 @@ def netlist_to_pnr_inputs(netlist_path: str):
         final_names.append(name)
         final_bindings[name] = (a, b)
 
-    # (4) create Passives
+    # Create Passives
     comps = _make_passives_from_names(final_names)
+    print(f"[DEBUG] Created {len(comps)} components: {[c.name for c in comps]}")
 
-    # (5) BUILD **PIN-LEVEL** BINDINGS for the new PnR
-    pin_bindings = {f"{n}.A": a for n, (a, b) in final_bindings.items()}
-    pin_bindings.update({f"{n}.B": b for n, (a, b) in final_bindings.items()})
-
-    # (6) build nets dict for internal nets only
+    # Build nets dict for internal nets only
     internal = set()
     for a, b in final_bindings.values():
         if a not in ("V+", "GND"):
@@ -222,18 +224,18 @@ def netlist_to_pnr_inputs(netlist_path: str):
         if b not in ("V+", "GND"):
             internal.add(b)
     nets = {n: Net(n) for n in sorted(internal)}
+    print(f"[DEBUG] Created {len(nets)} internal nets: {list(nets.keys())}")
 
-    # debug prints
+    # Debug prints
     try:
-        print("Components (final):", final_names)
-        print("Bindings (component-level):", final_bindings)
-        print("Bindings (pin-level):", pin_bindings)
-        print("Internal nets:", list(nets.keys()))
+        print("[DEBUG] Components (final):", final_names)
+        print("[DEBUG] Bindings (component-level):", final_bindings)
+        print("[DEBUG] Internal nets:", list(nets.keys()))
     except Exception:
         pass
 
-    # IMPORTANT: return pin_bindings (not component-level)
-    return nets, comps, pin_bindings
+    # Return component-level bindings directly
+    return nets, comps, final_bindings
 
 
 class CircuitToPrinterWorkflow(BaseWorkflow):
@@ -267,17 +269,28 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             netlist_path = os.path.join(out_dir, "current_netlist.net")
             with open(netlist_path, "w") as f:
                 f.write(netlist_str)
+            print(f"[DEBUG] Netlist saved to {netlist_path}")
 
             # Convert SPICE → PnR inputs
+            print("[DEBUG] Converting netlist to PnR inputs...")
             nets, comps, bindings = netlist_to_pnr_inputs(netlist_path)
+            print(f"[DEBUG] PnR inputs ready: {len(comps)} comps, {len(nets)} nets")
 
             # Breadboard & PnR
-            dbg = Dbg(on=True)
-            bb = Breadboard(rows=30, wire_lengths=(1, 3, 5)) 
-            pnr = PnR(bb, nets, comps, dbg=dbg)
+            print("[DEBUG] Initializing Breadboard...")
+            dbg = Dbg(on=True, logfile="pnr_debug.log")  # Enable debugging
+            bb = Breadboard(rows=30, wire_lengths=(1, 2, 3, 4, 5, 6))
+            print(f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails")
 
-            ok = pnr.placeAndRoute(bindings)
+            print("[DEBUG] Initializing PnR...")
+            pnr = PnR(bb, nets, comps, dbg=dbg, max_segments=3)
+            
+            print(f"[DEBUG] Starting place_and_route with bindings: {bindings}")
+            ok = pnr.place_and_route(bindings)
+            print(f"[DEBUG] place_and_route returned: {ok}")
+            
             sol = pnr.solution()
+            print(f"[DEBUG] Solution: {sol}")
 
             # Routing report
             routing_txt = [
@@ -292,16 +305,21 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             routing_summary = "".join(routing_txt)
 
             # Render
+            print("[DEBUG] Rendering breadboard...")
             renderBreadboard(sol, bb, filename="breadboard.png", show=False, title="PnR Result")
+            print("[DEBUG] Breadboard rendered")
 
             # Store results
             result_name = f"{workflow_name}_result"
             state.context[result_name] = {"routing": routing_summary, "gcode": MOCK_GCODE}
             state.status = Status.SUCCESS
+            print("[DEBUG] Workflow completed successfully")
 
         except Exception as e:
             state.status = Status.ERROR
             state.err_message = f"CircuitToPrinter failed: {e}"
+            print(f"[ERROR] {state.err_message}")
+            print(traceback.format_exc())
 
         await asyncio.sleep(1)  # optional
 

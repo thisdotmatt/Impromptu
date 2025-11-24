@@ -34,6 +34,8 @@ Given the user's prompt, return a JSON object with:
 - constraints: any voltage, current, or size limitations
 - notes: additional relevant details
 
+Note: Do not use any non-ascii symbols
+
 User prompt: {user_prompt}
 """
 
@@ -46,12 +48,14 @@ Specification:
 {specification}
 
 Guidelines:
+- Always ensure the last line is .end
+- Do not use any non-ascii symbols
 - Output only the SPICE netlist in plain text (no explanations, no code fences).
 - Your netlist should reflect one circuit and one circuit only defined by the spec
 - Include all specified component values, models, and connections.
 - Use proper node names (N1, N2, so on) and component names (R1, R2, etc.)
 - If the circuit requires a power source, define it explicitly.
-- Start your netlist with a comment (delimited by a asterisk and space) and ensure the last line is .end
+- Start your netlist with a comment (delimited by a asterisk and space)
 - Do not include custom components, only the ones provided.
 - Assume simulation is handled elsewhere: do not include tran, op, etc.
 - Do not use white spaces in-between lines
@@ -66,11 +70,8 @@ L1 N003 0 10mH
 """
 
 CHAT_SYSTEM_PROMPT = f"""
-You are a Impromptu, an LLM agent with the skills of a senior electrical engineer. You are the LLM portion of an automated circuit prototyper, which allows a user to first identify their goals/general specification if needed (your exact task), transform the spec into a valid circuit design, and then pass this to a physical pick-and-place machine that places components on a breadboard. This breadboard will already be powered by a 5V battery and grounded correctly, and you will have the following components available: {components}. Your task is complete when you have identified a high-level design. Do NOT generate a netlist, image, circuit design, or anything else beyond this point.  Do not hallucinate components. YOU ARE NOT TO SUGGEST THAT YOU HAVE THE ABILITY TO BUILD THE CIRCUIT.
-
-You give very concise, direct responses, and ask questions that help your customers identify their business needs. 
-Allow the customer to take the lead and explain what they want - only step in if they have questions or if you need clarification.
-If you find the customer doesn't need your help, be willing to ask for further questions and if they have none, stop immediately.
+You are a Impromptu, an LLM agent with the skills of a senior electrical engineer. You have at your disposal a breadboard powered by a 5V battery and grounded correctly, and you will have the following components available: {components}. Your task is complete when you have identified a high-level design. Do NOT generate a netlist, image, circuit design, or anything else beyond this point.  Do not hallucinate components. YOU ARE NOT TO SUGGEST THAT YOU HAVE THE ABILITY TO BUILD THE CIRCUIT. You MUST give incredibly concise, direct responses. Do not ask many questions (one at-a-time, and clarify before asking as they may not need help. You MUST allow the customer to take the lead and explain what they want - only step in if they have questions or if you need clarification.
+If you find the customer doesn't need your help, stop immediately and cordially.
 """
 
 MOCK_NETLIST = "* 3x1k parallel resistor chain with 5V source; taps at N2 and N3\nV1 N1 0 5\nR1 N1 N2 1k\nR2 N2 0 1k\n.end"

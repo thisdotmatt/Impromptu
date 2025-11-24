@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
+import { flushSync } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -190,46 +191,73 @@ export function PipelineRunner({
   }) => {
     const { stage, status, result, subStage, tokenCost, startTimeMs, endTimeMs, durationMs } = update
 
-    if (!subStage) {
-      setSelectedStageId(stage)
+    console.debug("[handleStreamUpdate] Incoming update:", {
+      stage,
+      status,
+      resultKeys: result ? Object.keys(result) : null,
+      subStage,
+      durationMs,
+    })
 
-      // Compute times synchronously to avoid batching issues
+    if (!subStage) {
+      // CRITICAL: set selectedStageId synchronously BEFORE state update
+      setSelectedStageId(stage)
+      console.debug("[handleStreamUpdate] setSelectedStageId ->", stage)
+
       const nowMs = Date.now()
       if (status === "running") {
-        stageStartRef.current[stage] = startTimeMs ?? nowMs
+        if (!stageStartRef.current[stage]) stageStartRef.current[stage] = startTimeMs ?? nowMs
       }
 
-      setStages((prevStages) =>
-        prevStages.map((currentStage) => {
-          if (currentStage.id !== stage) return currentStage
+      flushSync(() => {
+        setStages((prevStages) => {
+          const updated = prevStages.map((currentStage) => {
+            if (currentStage.id !== stage) return currentStage
 
-          const timeUpdates: Partial<PipelineStageType> = { status, result, tokenCost }
+            const startTime = status === "running" ? new Date(stageStartRef.current[stage]) : currentStage.startTime
+            const endTime = status === "success" || status === "error" ? new Date(endTimeMs ?? Date.now()) : currentStage.endTime
+            const newDuration =
+              (durationMs != null && durationMs >= 0)
+                ? durationMs
+                : startTime && endTime
+                ? endTime.getTime() - (startTime?.getTime() ?? endTime.getTime())
+                : currentStage.duration
 
-          // Prefer server timings if present
-          if (typeof startTimeMs === "number") timeUpdates.startTime = new Date(startTimeMs)
-          if (typeof endTimeMs === "number") timeUpdates.endTime = new Date(endTimeMs)
-          if (typeof durationMs === "number") timeUpdates.duration = Math.max(0, durationMs)
+            const newStage = {
+              ...currentStage,
+              status:
+                status === "running"
+                  ? ("running" as const)
+                  : status === "success"
+                  ? ("success" as const)
+                  : status === "error"
+                  ? ("error" as const)
+                  : (currentStage.status as StageStatus),
+              result: result ?? currentStage.result, // CRITICAL: only override if result is provided
+              tokenCost: tokenCost ?? currentStage.tokenCost,
+              startTime: startTime ?? currentStage.startTime,
+              endTime: endTime ?? currentStage.endTime,
+              duration: typeof newDuration === "number" ? newDuration : currentStage.duration,
+            }
 
-          // If server didn't send timing, compute here with our ref to avoid batching races
-          if (!startTimeMs && status === "running") {
-            timeUpdates.startTime = new Date(stageStartRef.current[stage] || nowMs)
-          } else if (!durationMs && (status === "success" || status === "error")) {
-            const startMs =
-              stageStartRef.current[stage] ??
-              currentStage.startTime?.getTime() ??
-              pipelineStartTime?.getTime() ??
-              nowMs
-            const end = new Date(endTimeMs ?? nowMs)
-            timeUpdates.startTime = new Date(startMs)
-            timeUpdates.endTime = end
-            timeUpdates.duration = Math.max(0, end.getTime() - startMs)
-          }
+            console.debug(`[setStages] Updated stage ${stage}:`, {
+              status: newStage.status,
+              resultPresent: !!newStage.result,
+              resultKeys: newStage.result ? Object.keys(newStage.result) : null,
+            })
 
-          return { ...currentStage, ...timeUpdates }
-        }),
-      )
+            return newStage
+          })
+
+          console.debug("[setStages] All stages after update:", updated)
+          return updated
+        })
+      })
     } else {
-      updateSubStage(stage, subStage, status)
+      console.debug("[handleStreamUpdate] Updating substage:", { stage, subStage, status })
+      flushSync(() => {
+        updateSubStage(stage, subStage, status)
+      })
     }
   }
 
@@ -261,47 +289,53 @@ export function PipelineRunner({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userInput: messages[0].content,
+          userInput: messages[0]?.content ?? "",
           conversationContext: messages,
           selectedModel,
           requirements: conversationContext,
         }),
       })
 
-      if (!response.ok) throw new Error("Failed to start circuit generation")
+      if (!response.ok) throw new Error(`Backend returned ${response.status}`)
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       if (!reader) throw new Error("No response stream available")
 
+      // Robust SSE parsing: accumulate buffer and split by empty line boundaries
+      let sseBuffer = ""
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value)
-        const lines = chunk.split("\n")
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue
+        sseBuffer += decoder.decode(value, { stream: true })
+
+        // split by double newline (SSE event separator)
+        const parts = sseBuffer.split(/\r?\n\r?\n/)
+        sseBuffer = parts.pop() || "" // last part may be partial
+
+        for (const part of parts) {
+          if (!part.trim()) continue
+          // collect data: lines
+          const lines = part.split(/\r?\n/).map((l) => l.trim())
+          const dataLines = lines.filter((l) => l.startsWith("data: "))
+          if (dataLines.length === 0) continue
+          const raw = dataLines.map((l) => l.slice(6)).join("\n")
 
           try {
-            // Parse the SSE payload (and defensively unwrap if double-wrapped)
-            let evt: any = JSON.parse(line.slice(6))
-            if (typeof evt?.payload === "string" && evt.payload.startsWith("data: ")) {
-              evt = JSON.parse(evt.payload.slice(6))
-            }
+            const evt = JSON.parse(raw)
+            console.debug("SSE parsed event:", evt)
 
             const type = evt?.type as string | undefined
 
             if (type === "workflow_started") {
-              const stage = evt.workflow as string
-              handleStreamUpdate({ stage, status: "running" })
+              handleStreamUpdate({ stage: evt.workflow, status: "running" })
               continue
             }
 
             if (type === "workflow_succeeded") {
               const stage = evt.workflow as string
               const ctx = evt.context ?? {}
-              const durationMs =
-                typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
+              const durationMs = typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
               const tokenCost = {
                 inputTokens: Number(ctx.input_tokens ?? 0),
                 outputTokens: Number(ctx.output_tokens ?? 0),
@@ -309,72 +343,40 @@ export function PipelineRunner({
                 estimatedCost: Number(ctx.cost ?? 0),
               }
               let resultObj: Record<string, any> | undefined
-              const raw = evt.result
-              if (raw != null) {
-                if (typeof raw === "object") {
-                  resultObj = raw as Record<string, any>
-                } else if (typeof raw === "string") {
+              if (evt.result != null) {
+                if (typeof evt.result === "string") {
                   try {
-                    const parsed = JSON.parse(raw)
-                    resultObj = typeof parsed === "object" && parsed !== null ? parsed : { displayed_result: raw }
+                    resultObj = JSON.parse(evt.result)
                   } catch {
-                    resultObj = { displayed_result: raw }
+                    resultObj = { text: evt.result }
                   }
+                } else {
+                  resultObj = evt.result
                 }
               }
-
-              handleStreamUpdate({ stage, status: "success", result: resultObj, tokenCost, durationMs })
+              handleStreamUpdate({ stage, status: "success", result: resultObj, tokenCost, durationMs, endTimeMs: Date.now() })
               continue
             }
 
             if (type === "workflow_failed") {
               const stage = evt.workflow as string
-              const ctx = evt.context ?? {}
-              const durationMs =
-                typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
-              const tokenCost = {
-                inputTokens: Number(ctx.input_tokens ?? 0),
-                outputTokens: Number(ctx.output_tokens ?? 0),
-                totalTokens: Number(ctx.total_tokens ?? 0),
-                estimatedCost: Number(ctx.cost ?? 0),
-              }
-              let resultObj: Record<string, any> | undefined
-              const raw = evt.error ?? evt.result
-              if (raw != null) {
-                if (typeof raw === "object") {
-                  resultObj = raw as Record<string, any>
-                } else if (typeof raw === "string") {
-                  try {
-                    const parsed = JSON.parse(raw)
-                    resultObj = typeof parsed === "object" && parsed !== null ? parsed : { displayed_result: raw }
-                  } catch {
-                    resultObj = { displayed_result: raw }
-                  }
-                }
-              }
-              handleStreamUpdate({ stage, status: "error", result: resultObj, tokenCost, durationMs })
+              handleStreamUpdate({ stage, status: "error", result: { error: evt.error ?? evt.err_message }, endTimeMs: Date.now() })
               continue
             }
 
             if (type === "substage_started") {
-              const stage = evt.workflow as string
-              const subStage = evt.substage as string
-              handleStreamUpdate({ stage, subStage, status: "running" })
+              handleStreamUpdate({ stage: evt.workflow as string, subStage: evt.substage as string, status: "running" })
               continue
             }
 
             if (type === "substage_completed") {
-              const stage = evt.workflow as string
-              const subStage = evt.substage as string
-              handleStreamUpdate({ stage, subStage, status: "success" })
+              handleStreamUpdate({ stage: evt.workflow as string, subStage: evt.substage as string, status: "success" })
               continue
             }
 
-            // Optional: ignore run_* for UI
-            // run_started, run_succeeded, run_failed → no-op
-
+            // ignore others
           } catch (e) {
-            console.error("Failed to parse stream update:", e)
+            console.error("Failed to parse SSE event:", e)
           }
         }
       }
@@ -409,17 +411,29 @@ export function PipelineRunner({
   const hasConversation = messages.length > 0
   const selectedStage = stages.find((stage) => stage.id === selectedStageId)
   const formatResultValues = (res: Record<string, any>) => {
-    const vals = Object.values(res ?? {})
-    if (vals.length === 0) return ""
-    return vals
-      .map((v) => {
-        if (v == null) return ""
-        if (typeof v === "string") return v
-        if (typeof v === "number" || typeof v === "boolean") return String(v)
+    console.debug("[formatResultValues] Input result:", res)
+    
+    if (!res) return "No results"
+
+    // Handle nested result objects (e.g., { spec: {...} } or { text: "..." })
+    const entries = Object.entries(res)
+    console.debug("[formatResultValues] Entries:", entries)
+
+    return entries
+      .map(([key, value]) => {
+        console.debug(`[formatResultValues] Processing key="${key}":`, value)
+        
+        if (value == null) return ""
+        
+        if (typeof value === "string") return value
+        
+        if (typeof value === "number" || typeof value === "boolean") return String(value)
+        
+        // For objects/arrays, pretty-print
         try {
-          return JSON.stringify(v, null, 2)
+          return `${key}:\n${JSON.stringify(value, null, 2)}`
         } catch {
-          return String(v)
+          return String(value)
         }
       })
       .filter(Boolean)

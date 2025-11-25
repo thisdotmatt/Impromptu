@@ -6,7 +6,7 @@ from config import CHAT_SYSTEM_PROMPT, MAX_RETRIES
 from executor import Executor
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from utils.helpers import formatSSEMessage, execute_gcode_script  # <-- NOTE: import here
+from utils.helpers import execute_gcode_script, formatSSEMessage  # <-- NOTE: import here
 from utils.types import EventCallback, Status, WorkflowState, sse_headers
 from workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow  # <-- no execute_gcode
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
@@ -132,19 +132,19 @@ async def execute_gcode_endpoint(request: Request):
     try:
         body = await request.json()
         gcode_content = body.get("gcode")
-        
+
         if not gcode_content:
             return {"status": "error", "message": "No G-code provided"}
-        
+
         # Execute the G-code using helpers.execute_gcode_script
         print("Received gcode from frontend: ", gcode_content)
         success = execute_gcode_script(gcode_content)
-        
+
         if success:
             return {"status": "success", "message": "G-code executed successfully"}
         else:
             return {"status": "error", "message": "Failed to execute G-code on printer"}
-    
+
     except Exception as e:
         print(f"[ERROR] Execute G-code failed: {e}")
         return {"status": "error", "message": str(e)}

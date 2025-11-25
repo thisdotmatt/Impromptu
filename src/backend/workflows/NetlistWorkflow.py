@@ -1,16 +1,16 @@
 import os
-import asyncio
-import ltspice
 from datetime import datetime, timezone
 from typing import Awaitable, Dict, List
 
+import ltspice
 from agents.NetlistAgent import NetlistAgent
-from utils.types import EventCallback, Status, WorkflowState
-from utils.helpers import validateNetlist
+from config import LTSPICE_PATH
 from spicelib import SimRunner, SpiceEditor
 from spicelib.simulators.ltspice_simulator import LTspice
-from config import LTSPICE_PATH, USE_MOCK_LLM
+from utils.helpers import validateNetlist
+from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
+
 
 class NetlistWorkflow(BaseWorkflow):
     """
@@ -122,11 +122,12 @@ class NetlistWorkflow(BaseWorkflow):
         state.err_message = f"Error during workflow {state.current_workflow} while running stage {state.current_stage}: {state.err_message}"
         return state
 
+
 async def simulate_tool(state: WorkflowState):
     try:
         result_key = f"{state.current_workflow}_result"
         netlist_str = state.context.get(result_key, {}).get("netlist")
-            
+
         if not netlist_str:
             raise ValueError("Missing generated netlist in context")
 
@@ -136,7 +137,7 @@ async def simulate_tool(state: WorkflowState):
         print("Writing netlist to path: ", netlist_path)
         with open(netlist_path, "w") as f:
             f.write(netlist_str)
-            
+
         editor = SpiceEditor(netlist_path, create_blank=False)
 
         with open(netlist_path, "r") as f:
@@ -145,11 +146,11 @@ async def simulate_tool(state: WorkflowState):
                 print("read line: ", line)
                 editor.add_instruction(line)
                 line = f.readline()
-        #editor.add_instruction(".tran 0 0.1 0 0.01")
-        editor.add_instruction(".op") # temporary, add more intelligent simulation later
+        # editor.add_instruction(".tran 0 0.1 0 0.01")
+        editor.add_instruction(".op")  # temporary, add more intelligent simulation later
         editor.add_instruction(".backanno")
-        #print("Components: ", editor.get_components())
-        #print(f"Netlist: {editor.netlist}")
+        # print("Components: ", editor.get_components())
+        # print(f"Netlist: {editor.netlist}")
         print(editor.netlist)
         runner = SimRunner(
             simulator=LTspice.create_from(LTSPICE_PATH),
@@ -158,9 +159,7 @@ async def simulate_tool(state: WorkflowState):
         )
         print("Got to just before run_now")
         raw_path, log_path = runner.run_now(
-            netlist=editor,
-            exe_log=True,
-            run_filename="generated_run.net"
+            netlist=editor, exe_log=True, run_filename="generated_run.net"
         )
 
         state.context["simulation_result"] = {
@@ -178,7 +177,9 @@ async def simulate_tool(state: WorkflowState):
         state.status = Status.ERROR
         workflow_name = state.current_workflow or "netlist_generation"
         result_name = f"{workflow_name}_result"
-        state.err_message = f"Simulation failed: Generated Netlist:\n {state.context[result_name]}\nError:\n {e}"
+        state.err_message = (
+            f"Simulation failed: Generated Netlist:\n {state.context[result_name]}\nError:\n {e}"
+        )
 
     return state
 

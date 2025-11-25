@@ -1,11 +1,13 @@
+import asyncio
+
 from agents.BaseAgent import BaseAgent
-from config import NETLIST_GENERATION_PROMPT, MOCK_NETLIST, USE_MOCK_LLM, components
+from config import MOCK_NETLIST, NETLIST_GENERATION_PROMPT, USE_MOCK_LLM, components
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from models.OpenAIModel import OpenAIModel
 from openai import OpenAIError, RateLimitError
 from utils.types import AgentResponse, Status
-import asyncio
+
 
 class NetlistAgent(BaseAgent):
     """
@@ -27,29 +29,29 @@ class NetlistAgent(BaseAgent):
         # )
 
     async def run(self, model: str, prompt: str) -> AgentResponse:
-            if USE_MOCK_LLM:
-                mock_response = AgentResponse(response=self._mock(prompt), status=Status.SUCCESS)
-                return mock_response
+        if USE_MOCK_LLM:
+            mock_response = AgentResponse(response=self._mock(prompt), status=Status.SUCCESS)
+            return mock_response
 
-            llm = OpenAIModel(model).getModel()
-            prompt_template = PromptTemplate(
-                template=NETLIST_GENERATION_PROMPT, input_variables=["components", "specification"]
+        llm = OpenAIModel(model).getModel()
+        prompt_template = PromptTemplate(
+            template=NETLIST_GENERATION_PROMPT, input_variables=["components", "specification"]
+        )
+        parser = StrOutputParser()
+        chain = prompt_template | llm | parser
+
+        try:
+            netlist_text = await asyncio.to_thread(
+                chain.invoke,
+                {"components": components, "specification": prompt},
             )
-            parser = StrOutputParser()
-            chain = prompt_template | llm | parser
+        except RateLimitError as e:
+            err_message = f"OpenAI quota exceeded with message: {e}"
+            print("RateLimitError:", e)
+            return AgentResponse(response="", status=Status.ERROR, err_message=err_message)
+        except OpenAIError as e:
+            err_message = f"Encountered OpenAI error with message {e}"
+            print("OpenAI API Error:", e)
+            return AgentResponse(response="", status=Status.ERROR, err_message=err_message)
 
-            try:
-                netlist_text = await asyncio.to_thread(
-                    chain.invoke,
-                    {"components": components, "specification": prompt},
-                )
-            except RateLimitError as e:
-                err_message = f"OpenAI quota exceeded with message: {e}"
-                print("RateLimitError:", e)
-                return AgentResponse(response="", status=Status.ERROR, err_message=err_message)
-            except OpenAIError as e:
-                err_message = f"Encountered OpenAI error with message {e}"
-                print("OpenAI API Error:", e)
-                return AgentResponse(response="", status=Status.ERROR, err_message=err_message)
-
-            return AgentResponse(response=netlist_text, status=Status.SUCCESS)
+        return AgentResponse(response=netlist_text, status=Status.SUCCESS)

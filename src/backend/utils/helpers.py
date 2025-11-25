@@ -1,15 +1,16 @@
+import base64
 import json
-from typing import Tuple
-from collections import defaultdict, deque
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Circle
-from ltspice import Ltspice
-import ast
 import re
 import time
-import base64
+from collections import defaultdict, deque
 from io import BytesIO
+from typing import Tuple
+
+import matplotlib.pyplot as plt
 import requests
+from ltspice import Ltspice
+from matplotlib.patches import Circle, Rectangle
+
 
 def formatSSEMessage(event) -> str:
     return f"data: {json.dumps(event)}\n\n"
@@ -48,34 +49,35 @@ async def checkTracesUnderMaxVoltage(
                 return (False, trace, max_vol)
     return (True, None, None)
 
-async def validateNetlist(spiceObj):
-    results = {
-        "short_ok": True,
-        "voltage_ok": True,
-        "problems": []
-    }
 
-    short_check, problem_trace, problem_current = await checkTracesUnderMaxCurrent(spiceObj=spiceObj)
+async def validateNetlist(spiceObj):
+    results = {"short_ok": True, "voltage_ok": True, "problems": []}
+
+    short_check, problem_trace, problem_current = await checkTracesUnderMaxCurrent(
+        spiceObj=spiceObj
+    )
     if not short_check:
         results["short_ok"] = False
         results["problems"].append(
             f"Short circuit detected on {problem_trace} with current {problem_current}"
         )
 
-    voltage_check, problem_trace, problem_voltage = await checkTracesUnderMaxVoltage(spiceObj=spiceObj)
+    voltage_check, problem_trace, problem_voltage = await checkTracesUnderMaxVoltage(
+        spiceObj=spiceObj
+    )
     if not voltage_check:
         results["voltage_ok"] = False
-        results["problems"].append(
-            f"High voltage detected on {problem_trace}: {problem_voltage}V"
-        )
+        results["problems"].append(f"High voltage detected on {problem_trace}: {problem_voltage}V")
 
     return results
+
 
 class Dbg:
     """
     Simple debugging helper. Wrap all debug prints through this so you can turn
     them on/off globally. When enabled, logs to a file instead of stdout.
     """
+
     def __init__(self, on: bool = False, logfile: str = "pnr_debug.log"):
         self.on = on
         self.step = 0
@@ -100,11 +102,13 @@ class Dbg:
         if self.on:
             self._write(f"[{self.step}] {msg}")
 
+
 class UF:
     """
     Union-Find (Disjoint Set) structure used to track which holes are
     electrically connected together.
     """
+
     def __init__(self):
         self.parent = {}
         self.rank = {}
@@ -144,6 +148,7 @@ class Breadboard:
     - On each side there are vertical power rails: V+ and GND.
     - Some columns are "gaps" with no holes (just visual spacing).
     """
+
     def __init__(self, rows=40, wire_lengths=(1, 3, 5)):
         self.rows = rows
 
@@ -157,9 +162,9 @@ class Breadboard:
         self.wire_lengths = sorted(set(wire_lengths))
 
         # Geometry containers
-        self.holes = set()         # All board holes (excluding rails)
-        self.rails_v = set()       # All V+ rail holes
-        self.rails_g = set()       # All GND rail holes
+        self.holes = set()  # All board holes (excluding rails)
+        self.rails_v = set()  # All V+ rail holes
+        self.rails_g = set()  # All GND rail holes
 
         # Mapping from hole -> its 5-hole strip (for the main board)
         self.strip_of_hole = {}
@@ -176,8 +181,8 @@ class Breadboard:
 
         # Realistic rails: left and right vertical rails, each separated
         # from the board by a 2-hole gap (no actual holes there).
-        self.left_rail_cols = (-4, -3)   # V+ (col -4), GND (col -3) on far left
-        self.left_gap_cols = (-2, -1)    # 2 empty columns before main board
+        self.left_rail_cols = (-4, -3)  # V+ (col -4), GND (col -3) on far left
+        self.left_gap_cols = (-2, -1)  # 2 empty columns before main board
         self.right_gap_cols = (self.total_cols, self.total_cols + 1)
         self.right_rail_cols = (self.total_cols + 2, self.total_cols + 3)
 
@@ -218,8 +223,7 @@ class Breadboard:
             left_strip = [(r, c) for c in range(self.cols_left)]
             right_strip = [
                 (r, c)
-                for c in range(self.trough_cols[1] + 1,
-                               self.trough_cols[1] + 1 + self.cols_right)
+                for c in range(self.trough_cols[1] + 1, self.trough_cols[1] + 1 + self.cols_right)
             ]
             for hole in left_strip:
                 self.strip_of_hole[hole] = tuple(left_strip)
@@ -234,7 +238,7 @@ class Breadboard:
 
         # Initialize occupancy for all *real* holes (board + rails).
         # Gap columns have NO holes and therefore no entries in occ.
-        for hole in (self.holes | self.rails_v | self.rails_g):
+        for hole in self.holes | self.rails_v | self.rails_g:
             self.occ[hole] = ("empty", None)
 
     def _union_all(self, holes):
@@ -253,7 +257,7 @@ class Breadboard:
         - each vertical rail as one connected group
         """
         self.uf = UF()
-        for hole in (self.holes | self.rails_v | self.rails_g):
+        for hole in self.holes | self.rails_v | self.rails_g:
             self.uf.add(hole)
 
         # Unite each 5-hole strip
@@ -344,8 +348,7 @@ class Breadboard:
         """
         Frontier for an anchor like 'V+' or 'GND' = all empty holes on that rail.
         """
-        return [h for h in self.hole_set_for_net_anchor(anchor)
-                if self.occ[h][0] == "empty"]
+        return [h for h in self.hole_set_for_net_anchor(anchor) if self.occ[h][0] == "empty"]
 
     def frontier_of_hole(self, hole):
         """
@@ -372,6 +375,7 @@ class Passive:
     - Orientation ('h' or 'v')
     - Nets connected to each pin (net_a, net_b)
     """
+
     def __init__(self, name, length, orientation="h"):
         self.name = name
         self.length = length
@@ -398,7 +402,7 @@ class Passive:
         placements = []
 
         # Step direction for this component's orientation
-        dr, dc = ((0, 1) if self.orientation == "h" else (1, 0))
+        dr, dc = (0, 1) if self.orientation == "h" else (1, 0)
 
         for hole in bb.holes:
             r, c = hole
@@ -429,18 +433,12 @@ class Passive:
             strip1 = bb.strip_of_hole.get(pins[1])
 
             if strip0:
-                free0 = sum(
-                    1 for h2 in strip0
-                    if bb.occ[h2][0] == "empty" and h2 not in pins
-                )
+                free0 = sum(1 for h2 in strip0 if bb.occ[h2][0] == "empty" and h2 not in pins)
                 if free0 < 1:
                     continue
 
             if strip1:
-                free1 = sum(
-                    1 for h2 in strip1
-                    if bb.occ[h2][0] == "empty" and h2 not in pins
-                )
+                free1 = sum(1 for h2 in strip1 if bb.occ[h2][0] == "empty" and h2 not in pins)
                 if free1 < 1:
                     continue
 
@@ -461,6 +459,7 @@ class Net:
     - fixed_anchors: special identifiers like 'V+' or 'GND' to tie the net to rails
     - seg_paths: list of wire segments; each is a list of hole coordinates along a straight jumper
     """
+
     def __init__(self, name):
         self.name = name
         self.terms = []
@@ -483,6 +482,7 @@ class PnR:
     2) Route each net with straight jumper wires of allowed lengths.
     3) Check that there are no shorts between distinct nets.
     """
+
     def __init__(self, bb: Breadboard, nets: dict, comps: list, dbg: Dbg = None, max_segments=3):
         self.bb = bb
         self.nets = nets
@@ -546,7 +546,7 @@ class PnR:
                     is_endpoint = (idx == 0) or (idx == len(holes) - 1)
                     if not is_endpoint:
                         return False
-                    if net.name in ('V+', 'GND'):
+                    if net.name in ("V+", "GND"):
                         if rk != net.name:
                             return False
                     else:
@@ -565,7 +565,7 @@ class PnR:
             seg_id = f"seg{self.seg_id_ctr}"
             self.seg_id_ctr += 1
             if not self.bb.claim_wire_segment(seg_id, holes):
-                for claimed in net.seg_paths[-len(seg_holes_all):]:
+                for claimed in net.seg_paths[-len(seg_holes_all) :]:
                     self.bb.release_wire_segment(claimed)
                     net.seg_paths.pop()
                 return False
@@ -887,6 +887,7 @@ class PnR:
         - then longer ones,
         - then by name to keep things deterministic.
         """
+
         def key(c: Passive):
             rail_weight = (c.net_a in ("V+", "GND")) + (c.net_b in ("V+", "GND"))
             return (-rail_weight, -c.length, c.name)
@@ -917,20 +918,14 @@ class PnR:
         else:
             net_a = self.nets.get(comp.net_a)
             if net_a and net_a.terms:
-                score += min(
-                    abs(pin_a[0] - t[0]) + abs(pin_a[1] - t[1])
-                    for t in net_a.terms
-                )
+                score += min(abs(pin_a[0] - t[0]) + abs(pin_a[1] - t[1]) for t in net_a.terms)
 
         if comp.net_b in ("V+", "GND"):
             score += 0.3 * dist_to_rail(pin_b, comp.net_b)
         else:
             net_b = self.nets.get(comp.net_b)
             if net_b and net_b.terms:
-                score += min(
-                    abs(pin_b[0] - t[0]) + abs(pin_b[1] - t[1])
-                    for t in net_b.terms
-                )
+                score += min(abs(pin_b[0] - t[0]) + abs(pin_b[1] - t[1]) for t in net_b.terms)
 
         return score
 
@@ -1094,24 +1089,18 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=False, title="Brea
     ax.set_title(title)
 
     # Draw holes
-    for (r, c) in all_real_holes:
+    for r, c in all_real_holes:
         ax.add_patch(Circle((c, r), 0.08, fill=False, linewidth=0.5))
 
     # Draw trough as dashed columns
     for c in trough_cols:
-        ax.add_patch(
-            Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--")
-        )
+        ax.add_patch(Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--"))
 
     # Draw side gaps
     for c in bb.left_gap_cols:
-        ax.add_patch(
-            Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--")
-        )
+        ax.add_patch(Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--"))
     for c in bb.right_gap_cols:
-        ax.add_patch(
-            Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--")
-        )
+        ax.add_patch(Rectangle((c - 0.5, -0.5), 1, rows, fill=False, linewidth=1.0, linestyle="--"))
 
     # Label rail columns
     def label_col(col, text):
@@ -1129,10 +1118,10 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=False, title="Brea
     # Components
     for name, info in sol.get("components", {}).items():
         # Body
-        for (r, c) in info.get("body", []):
+        for r, c in info.get("body", []):
             ax.add_patch(Rectangle((c - 0.4, r - 0.4), 0.8, 0.8, alpha=0.35))
         # Pins
-        for (r, c) in info.get("pins", []):
+        for r, c in info.get("pins", []):
             ax.add_patch(Circle((c, r), 0.15, fill=False, linewidth=1.2))
 
         body = info.get("body", [])
@@ -1164,17 +1153,18 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=False, title="Brea
 
     # Convert to base64 PNG for JSON serialization
     buffer = BytesIO()
-    fig.savefig(buffer, format='png', dpi=200, bbox_inches='tight')
+    fig.savefig(buffer, format="png", dpi=200, bbox_inches="tight")
     buffer.seek(0)
-    image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-    
+    image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+
     if show:
         plt.show()
-    
+
     plt.close(fig)
 
     # Return base64 data URI string instead of figure/axes
     return f"data:image/png;base64,{image_base64}"
+
 
 # ===================================================================== #
 # G-CODE GENERATION
@@ -1286,10 +1276,8 @@ def generate_gcode_from_solution(solution: dict) -> str:
         # ])
         pickup_center_x, pickup_center_y = convertCornersToCenter(
             [
-                (col_dict[part_type],
-                 (part_num - 1) * (len_dict[part_type] - 1)),
-                (col_dict[part_type],
-                 (part_num) * (len_dict[part_type] - 1)),
+                (col_dict[part_type], (part_num - 1) * (len_dict[part_type] - 1)),
+                (col_dict[part_type], (part_num) * (len_dict[part_type] - 1)),
             ]
         )
         pickup_nom_x = column_to_x(pickup_center_x)
@@ -1306,42 +1294,50 @@ def generate_gcode_from_solution(solution: dict) -> str:
         #   G0 F6000 Z25
         bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
         bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
-        gcode_lines.extend([
-            "G90",
-            f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
-            "G0 F6000 Z25",
-        ])
+        gcode_lines.extend(
+            [
+                "G90",
+                f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+                "G0 F6000 Z25",
+            ]
+        )
 
         # ---------- actuateDropper("pickup") ----------
         # old pickup branch:
         #   G0 Z{PICKUP_HEIGHT}
         #   VACUUM_ON
         #   G0 Z{PASSIVE_HEIGHT}
-        gcode_lines.extend([
-            f"G0 Z{PICKUP_HEIGHT}",
-            "VACUUM_ON",
-            f"G0 Z{PASSIVE_HEIGHT}",
-        ])
+        gcode_lines.extend(
+            [
+                f"G0 Z{PICKUP_HEIGHT}",
+                "VACUUM_ON",
+                f"G0 Z{PASSIVE_HEIGHT}",
+            ]
+        )
 
         # ---------- sendMoveCommand("placement", (nominal_x_board, nominal_y_board)) ----------
         bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
         bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
-        gcode_lines.extend([
-            "G90",
-            f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
-            "G0 F6000 Z25",
-        ])
+        gcode_lines.extend(
+            [
+                "G90",
+                f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
+                "G0 F6000 Z25",
+            ]
+        )
 
         # ---------- actuateDropper("placement") ----------
         # old placement branch:
         #   G0 Z{PLACE_HEIGHT}
         #   VACUUM_OFF
         #   G0 Z{PASSIVE_HEIGHT}
-        gcode_lines.extend([
-            f"G0 Z{PLACE_HEIGHT}",
-            "VACUUM_OFF",
-            f"G0 Z{PASSIVE_HEIGHT}",
-        ])
+        gcode_lines.extend(
+            [
+                f"G0 Z{PLACE_HEIGHT}",
+                "VACUUM_OFF",
+                f"G0 Z{PASSIVE_HEIGHT}",
+            ]
+        )
 
     # so every wire is effectively picked from the same storage location.
     local_wires_used = dict(wires_used)  # start from the same initial values
@@ -1350,7 +1346,7 @@ def generate_gcode_from_solution(solution: dict) -> str:
         holes = wire.get("holes", [])
         if not holes:
             continue
-        
+
         xs = [p[0] for p in holes]
         ys = [p[1] for p in holes]
         if len(set(xs)) > 1:
@@ -1376,16 +1372,20 @@ def generate_gcode_from_solution(solution: dict) -> str:
 
         bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
         bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
-        gcode_lines.extend([
-            "G90",
-            f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
-            "G0 F6000 Z25",
-        ])
-        gcode_lines.extend([
-            f"G0 Z{PICKUP_HEIGHT}",
-            "VACUUM_ON",
-            f"G0 Z{PASSIVE_HEIGHT}",
-        ])
+        gcode_lines.extend(
+            [
+                "G90",
+                f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+                "G0 F6000 Z25",
+            ]
+        )
+        gcode_lines.extend(
+            [
+                f"G0 Z{PICKUP_HEIGHT}",
+                "VACUUM_ON",
+                f"G0 Z{PASSIVE_HEIGHT}",
+            ]
+        )
 
         center_x_board, center_y_board = convertCornersToCenter(holes)
         nominal_x_board = column_to_x(center_x_board)
@@ -1393,16 +1393,20 @@ def generate_gcode_from_solution(solution: dict) -> str:
 
         bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
         bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
-        gcode_lines.extend([
-            "G90",
-            f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
-            "G0 F6000 Z25",
-        ])
-        gcode_lines.extend([
-            f"G0 Z{PLACE_HEIGHT}",
-            "VACUUM_OFF",
-            f"G0 Z{PASSIVE_HEIGHT}",
-        ])
+        gcode_lines.extend(
+            [
+                "G90",
+                f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
+                "G0 F6000 Z25",
+            ]
+        )
+        gcode_lines.extend(
+            [
+                f"G0 Z{PLACE_HEIGHT}",
+                "VACUUM_OFF",
+                f"G0 Z{PASSIVE_HEIGHT}",
+            ]
+        )
 
     return "\n".join(gcode_lines) + "\n"
 

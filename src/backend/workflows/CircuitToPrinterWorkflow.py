@@ -1,29 +1,30 @@
-import os
 import asyncio
+import os
 from datetime import datetime, timezone
-from typing import Awaitable, Dict, List, Tuple
-import traceback
-import base64
+from typing import Dict, List, Tuple
+
 import requests
-
 from spicelib import SpiceEditor
-
-from config import MOCK_GCODE
-from utils.types import EventCallback, Status, WorkflowState
 from utils.helpers import (
-    Breadboard, Net, Passive, PnR, renderBreadboard, Dbg,
-    generate_gcode_from_solution
+    Breadboard,
+    Dbg,
+    Net,
+    Passive,
+    PnR,
+    generate_gcode_from_solution,
+    renderBreadboard,
 )
+from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
 
 # Printer IP for G-code execution
 MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
 
 COMPONENT_DEFAULTS = {
-    "R":   {"length": 3, "orientation": "v"},
-    "C":   {"length": 3, "orientation": "v"},
-    "L":   {"length": 3, "orientation": "v"},
-    "D":   {"length": 3, "orientation": "v"}, 
+    "R": {"length": 3, "orientation": "v"},
+    "C": {"length": 3, "orientation": "v"},
+    "L": {"length": 3, "orientation": "v"},
+    "D": {"length": 3, "orientation": "v"},
     "LED": {"length": 3, "orientation": "v"},
 }
 
@@ -90,12 +91,14 @@ def _node_alias_fn(vplus_net: str):
     """
     Returns a function that maps raw SPICE nets → ('V+', 'GND', or raw intermediate).
     """
+
     def alias(n: str) -> str:
         if n == "0" or n.upper() == "GND":
             return "GND"
         if vplus_net and n == vplus_net:
             return "V+"
         return n
+
     return alias
 
 
@@ -198,7 +201,7 @@ def netlist_to_pnr_inputs(netlist_path: str):
         if n in ("V+", "GND"):
             return n
         if n not in mapping:
-            mapping[n] = f"N{len(mapping)+1}"
+            mapping[n] = f"N{len(mapping) + 1}"
         return mapping[n]
 
     mapping = {}
@@ -246,24 +249,24 @@ def netlist_to_pnr_inputs(netlist_path: str):
 def execute_gcode(gcode_content: str) -> bool:
     """
     Execute G-code commands on the printer via Moonraker API.
-    
+
     Args:
         gcode_content: String containing G-code commands
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
         payload = {"script": gcode_content}
         response = requests.post(MOONRAKER_URL, json=payload, timeout=30)
-        
+
         if response.status_code == 200:
             print(f"[SUCCESS] G-code executed: {len(gcode_content)} bytes sent")
             return True
         else:
             print(f"[ERROR] Moonraker returned {response.status_code}: {response.text}")
             return False
-    
+
     except requests.exceptions.Timeout:
         print("[ERROR] Moonraker request timed out")
         return False
@@ -314,38 +317,40 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             print("[DEBUG] Initializing Breadboard...")
             dbg = Dbg(on=True, logfile="pnr_debug.log")  # Enable debugging
             bb = Breadboard(rows=30, wire_lengths=(1, 2, 3, 4, 5, 6))
-            print(f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails")
+            print(
+                f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails"
+            )
 
             print("[DEBUG] Initializing PnR...")
             pnr = PnR(bb, nets, comps, dbg=dbg)
-            
+
             print(f"[DEBUG] Starting place_and_route with bindings: {bindings}")
             ok = pnr.place_and_route(bindings)
             print(f"[DEBUG] place_and_route returned: {ok}")
-            
+
             if not ok:
                 state.context["status"] = Status.ERROR
                 state.context["err_message"] = "P&R failed"
                 state.status = Status.ERROR
                 return state
-            
+
             sol = pnr.solution()
             print(f"[DEBUG] Solution: {sol}")
-            
+
             # Generate real G-code from PnR solution
             print("[DEBUG] Generating G-code from PnR solution...")
             gcode_output = generate_gcode_from_solution(sol)
             print(f"[DEBUG] G-code generated successfully ({len(gcode_output)} bytes)")
-            
+
             # Render breadboard (now returns base64 string)
             breadboard_image_b64 = renderBreadboard(sol, bb, filename=None, show=False)
-            
+
             # Store results with real G-code
             result_name = f"{workflow_name}_result"
             state.context[result_name] = {
                 "routing": "P&R completed successfully",
                 "gcode": gcode_output,
-                "breadboard_image": breadboard_image_b64  # Already a string
+                "breadboard_image": breadboard_image_b64,  # Already a string
             }
             state.status = Status.SUCCESS
             print("[DEBUG] Workflow completed successfully")

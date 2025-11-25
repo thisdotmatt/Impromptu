@@ -6,9 +6,9 @@ from config import CHAT_SYSTEM_PROMPT, MAX_RETRIES
 from executor import Executor
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from utils.helpers import formatSSEMessage
+from utils.helpers import formatSSEMessage, execute_gcode_script  # <-- NOTE: import here
 from utils.types import EventCallback, Status, WorkflowState, sse_headers
-from workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow
+from workflows.CircuitToPrinterWorkflow import CircuitToPrinterWorkflow  # <-- no execute_gcode
 from workflows.NetlistWorkflow import NetlistWorkflow, simulate_tool, verify_tool
 from workflows.SpecWorkflow import SpecWorkflow
 
@@ -19,9 +19,6 @@ event_queues: Dict[str, asyncio.Queue] = {}
 
 
 # we use this callback to update our queue from within the orchestrator
-# it's actually pretty straightforward - functions call the event callback to say
-# "hey, we have a new update!" and the callback adds the message to the queue
-# our event_stream then reads from this queue sends this server-side event to the user
 def getCallback(run_id: str) -> EventCallback:
     queue = event_queues.setdefault(run_id, asyncio.Queue())
 
@@ -124,3 +121,30 @@ async def create(run_id: str, request: Request):
     updateCallback = getCallback(run_id)
     asyncio.create_task(orchestrate_workflows(run_id, payload, updateCallback))
     return StreamingResponse(event_stream(run_id), headers=sse_headers)
+
+
+@app.post("/execute-gcode")
+async def execute_gcode_endpoint(request: Request):
+    """
+    Execute G-code on the printer.
+    Expects: { "gcode": "G90\\nG0 Z45\\n..." }
+    """
+    try:
+        body = await request.json()
+        gcode_content = body.get("gcode")
+        
+        if not gcode_content:
+            return {"status": "error", "message": "No G-code provided"}
+        
+        # Execute the G-code using helpers.execute_gcode_script
+        print("Received gcode from frontend: ", gcode_content)
+        success = execute_gcode_script(gcode_content)
+        
+        if success:
+            return {"status": "success", "message": "G-code executed successfully"}
+        else:
+            return {"status": "error", "message": "Failed to execute G-code on printer"}
+    
+    except Exception as e:
+        print(f"[ERROR] Execute G-code failed: {e}")
+        return {"status": "error", "message": str(e)}

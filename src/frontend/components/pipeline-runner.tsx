@@ -419,9 +419,16 @@ export function PipelineRunner({
 
     if (!res) return "No results"
 
-    // Handle nested result objects (e.g., { spec: {...} } or { text: "..." })
     const entries = Object.entries(res)
-    console.debug("[formatResultValues] Entries:", entries)
+    
+    // Check for breadboard image
+    if (res.breadboard_image) {
+        return {
+            image: res.breadboard_image,
+            routing: res.routing,
+            gcode: res.gcode
+        }
+    }
 
     return entries
       .map(([key, value]) => {
@@ -606,11 +613,48 @@ export function PipelineRunner({
               )}
 
               {selectedStage.result ? (
-                <div className="bg-muted/30 rounded p-3">
-                  <p className="text-sm font-medium mb-2">Results:</p>
-                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {formatResultValues(selectedStage.result)}
-                  </div>
+                <div className="bg-muted/30 rounded p-3 space-y-4">
+                  {selectedStage.result.breadboard_image && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Breadboard Layout:</p>
+                      <div className="max-w-md">
+                        <img
+                          src={selectedStage.result.breadboard_image}
+                          alt="Breadboard PnR Result"
+                          className="w-full rounded border border-muted-foreground/20"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {selectedStage.result.routing && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Routing Report:</p>
+                      <div className="text-xs whitespace-pre-wrap bg-background p-2 rounded border border-muted-foreground/10">
+                        {selectedStage.result.routing}
+                      </div>
+                    </div>
+                  )}
+                  {selectedStage.result.gcode && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">G-Code:</p>
+                      <div className="text-xs whitespace-pre-wrap bg-background p-2 rounded border border-muted-foreground/10">
+                        {selectedStage.result.gcode}
+                      </div>
+                    </div>
+                  )}
+                  {/* Render any other fields that aren't special */}
+                  {Object.entries(selectedStage.result).map(([key, value]) => {
+                    if (["breadboard_image", "routing", "gcode"].includes(key)) return null
+                    if (value === null || value === undefined) return null
+                    return (
+                      <div key={key}>
+                        <p className="text-sm font-medium mb-2 capitalize">{key.replace(/_/g, " ")}:</p>
+                        <div className="text-xs whitespace-pre-wrap bg-background p-2 rounded border border-muted-foreground/10">
+                          {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

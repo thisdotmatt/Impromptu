@@ -5,19 +5,10 @@ MAX_RETRIES = 1
 USE_MOCK_LLM = False
 
 components = """
-NE555 x4
-LED x20
-1 MOhm Resistor x5
-5K Ohm Resistor x50
-1K Ohm Resistor x10
-500 Ohm Resistor x50
-470 Ohm Resistor x100
-100 Ohm Resistor x50
-10 Ohm Resistor x100
-1uF Capacitor x20
-50pF Capacitor x20
-1nF Capacitor x20
-5nF Capacitor x10
+LED x1
+1K Ohm Resistor x2
+1uF Capacitor x1
+1mH Inductor x1
 5V Voltage Source with GND connection available x1
 """
 

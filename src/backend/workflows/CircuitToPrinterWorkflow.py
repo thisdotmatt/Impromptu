@@ -3,14 +3,21 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Awaitable, Dict, List, Tuple
 import traceback
+import base64
+import requests
 
 from spicelib import SpiceEditor
 
 from config import MOCK_GCODE
 from utils.types import EventCallback, Status, WorkflowState
-from utils.helpers import Breadboard, Net, Passive, PnR, renderBreadboard, Dbg
+from utils.helpers import (
+    Breadboard, Net, Passive, PnR, renderBreadboard, Dbg,
+    generate_gcode_from_solution
+)
 from workflows.BaseWorkflow import BaseWorkflow
 
+# Printer IP for G-code execution
+MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
 
 COMPONENT_DEFAULTS = {
     "R":   {"length": 3, "orientation": "v"},
@@ -236,10 +243,39 @@ def netlist_to_pnr_inputs(netlist_path: str):
     return nets, comps, final_bindings
 
 
-class CircuitToPrinterWorkflow(BaseWorkflow):
-    def __init__(self, tools: Dict[str, List[Awaitable]] = None):
-        self.tools = tools
+def execute_gcode(gcode_content: str) -> bool:
+    """
+    Execute G-code commands on the printer via Moonraker API.
+    
+    Args:
+        gcode_content: String containing G-code commands
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        payload = {"script": gcode_content}
+        response = requests.post(MOONRAKER_URL, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            print(f"[SUCCESS] G-code executed: {len(gcode_content)} bytes sent")
+            return True
+        else:
+            print(f"[ERROR] Moonraker returned {response.status_code}: {response.text}")
+            return False
+    
+    except requests.exceptions.Timeout:
+        print("[ERROR] Moonraker request timed out")
+        return False
+    except requests.exceptions.ConnectionError:
+        print("[ERROR] Failed to connect to Moonraker at {}".format(MOONRAKER_URL))
+        return False
+    except Exception as e:
+        print(f"[ERROR] G-code execution failed: {e}")
+        return False
 
+
+class CircuitToPrinterWorkflow(BaseWorkflow):
     async def run(self, state: WorkflowState, updateCallback: EventCallback) -> WorkflowState:
         workflow_name = state.current_workflow or "circuit_to_printer"
         state.status = Status.RUNNING
@@ -281,43 +317,44 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             print(f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails")
 
             print("[DEBUG] Initializing PnR...")
-            pnr = PnR(bb, nets, comps, dbg=dbg, max_segments=3)
+            pnr = PnR(bb, nets, comps, dbg=dbg)
             
             print(f"[DEBUG] Starting place_and_route with bindings: {bindings}")
             ok = pnr.place_and_route(bindings)
             print(f"[DEBUG] place_and_route returned: {ok}")
             
+            if not ok:
+                state.context["status"] = Status.ERROR
+                state.context["err_message"] = "P&R failed"
+                state.status = Status.ERROR
+                return state
+            
             sol = pnr.solution()
             print(f"[DEBUG] Solution: {sol}")
-
-            # Routing report
-            routing_txt = [
-                f"Placement & Routing {'SUCCESS' if (ok and sol.get('ok')) else 'FAILED'}\n",
-                "Components:\n",
-            ]
-            for k, v in sol.get("components", {}).items():
-                routing_txt.append(f"{k}: {v}\n")
-            routing_txt.append("Wires:\n")
-            for w in sol.get("wires", []):
-                routing_txt.append(f"{w}\n")
-            routing_summary = "".join(routing_txt)
-
-            # Render
-            print("[DEBUG] Rendering breadboard...")
-            renderBreadboard(sol, bb, filename="breadboard.png", show=False, title="PnR Result")
-            print("[DEBUG] Breadboard rendered")
-
-            # Store results
+            
+            # Generate real G-code from PnR solution
+            print("[DEBUG] Generating G-code from PnR solution...")
+            gcode_output = generate_gcode_from_solution(sol)
+            print(f"[DEBUG] G-code generated successfully ({len(gcode_output)} bytes)")
+            
+            # Render breadboard (now returns base64 string)
+            breadboard_image_b64 = renderBreadboard(sol, bb, filename=None, show=False)
+            
+            # Store results with real G-code
             result_name = f"{workflow_name}_result"
-            state.context[result_name] = {"routing": routing_summary, "gcode": MOCK_GCODE}
+            state.context[result_name] = {
+                "routing": "P&R completed successfully",
+                "gcode": gcode_output,
+                "breadboard_image": breadboard_image_b64  # Already a string
+            }
             state.status = Status.SUCCESS
             print("[DEBUG] Workflow completed successfully")
 
         except Exception as e:
+            print(f"[ERROR] CircuitToPrinter failed: {e}")
+            state.context["status"] = Status.ERROR
+            state.context["err_message"] = str(e)
             state.status = Status.ERROR
-            state.err_message = f"CircuitToPrinter failed: {e}"
-            print(f"[ERROR] {state.err_message}")
-            print(traceback.format_exc())
 
         await asyncio.sleep(1)  # optional
 

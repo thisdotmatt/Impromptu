@@ -4,6 +4,12 @@ from collections import defaultdict, deque
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Circle
 from ltspice import Ltspice
+import ast
+import re
+import time
+import base64
+from io import BytesIO
+import requests
 
 def formatSSEMessage(event) -> str:
     return f"data: {json.dumps(event)}\n\n"
@@ -1072,9 +1078,10 @@ class PnR:
         return sol
 
 
-def renderBreadboard(sol, bb: Breadboard, filename=None, show=True, title="Breadboard P&R"):
+def renderBreadboard(sol, bb: Breadboard, filename=None, show=False, title="Breadboard P&R"):
     """
-    Simple Matplotlib renderer for the final breadboard layout.
+    Matplotlib renderer for the final breadboard layout.
+    Returns base64-encoded PNG string instead of Figure object for JSON serialization.
     """
     rows = bb.rows
     trough_cols = bb.trough_cols
@@ -1121,8 +1128,10 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=True, title="Bread
 
     # Components
     for name, info in sol.get("components", {}).items():
+        # Body
         for (r, c) in info.get("body", []):
             ax.add_patch(Rectangle((c - 0.4, r - 0.4), 0.8, 0.8, alpha=0.35))
+        # Pins
         for (r, c) in info.get("pins", []):
             ax.add_patch(Circle((c, r), 0.15, fill=False, linewidth=1.2))
 
@@ -1132,7 +1141,7 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=True, title="Bread
             r_lab, c_lab = body[mid]
             ax.text(c_lab, r_lab, name, fontsize=8, ha="center", va="center")
 
-    # Wires
+    # Wires: straight line between endpoints, with endpoints highlighted
     for w in sol.get("wires", []):
         holes = w.get("holes", [])
         if len(holes) < 2:
@@ -1152,7 +1161,299 @@ def renderBreadboard(sol, bb: Breadboard, filename=None, show=True, title="Bread
 
     if filename:
         fig.savefig(filename, dpi=200)
+
+    # Convert to base64 PNG for JSON serialization
+    buffer = BytesIO()
+    fig.savefig(buffer, format='png', dpi=200, bbox_inches='tight')
+    buffer.seek(0)
+    image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+    
     if show:
         plt.show()
+    
+    plt.close(fig)
 
-    return fig, ax
+    # Return base64 data URI string instead of figure/axes
+    return f"data:image/png;base64,{image_base64}"
+
+# ===================================================================== #
+# G-CODE GENERATION
+# ===================================================================== #
+
+# Printer configuration
+MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
+
+# Printer and board offsets
+X_ORIGIN_PLACEMENT = 107.50
+Y_ORIGIN_PLACEMENT = 190
+X_ORIGIN_PICKUP = 156.5
+Y_ORIGIN_PICKUP = 141.5
+PLACE_HEIGHT = 14
+PICKUP_HEIGHT = 14
+PASSIVE_HEIGHT = 45
+
+# Component pickup coordinates
+col_dict = {"R": 0, "C": 2, "L": 4, "LED": 6, "W6": 8}
+len_dict = {"R": 6, "C": 6, "L": 6, "LED": 6, "W6": 6}
+wires_used = {"W6": 0}
+
+
+def column_to_x(col_f, pitch=2.54):
+    """Convert column index to X coordinate."""
+    return col_f * pitch
+
+
+def row_to_y(row, pitch=2.54):
+    """Convert row index to Y coordinate."""
+    return row * pitch
+
+
+def convertCornersToCenter(corners):
+    """Calculate center point from corner coordinates."""
+    if not corners:
+        return 0, 0
+    avg_x = sum(p[0] for p in corners) / len(corners)
+    avg_y = sum(p[1] for p in corners) / len(corners)
+    return avg_x, avg_y
+
+
+def convertCenterToNominal(centers):
+    """Convert center coordinates to nominal board coordinates."""
+    nominals = {}
+    for name, part in centers.items():
+        for center in part:
+            nominals[name] = (column_to_x(center[0]), row_to_y(center[1]))
+    return nominals
+
+
+def generate_gcode_from_solution(solution: dict) -> str:
+    """
+    Generate a COMPLETE G-code script from a PnR solution, matching the
+    behavior of the old `run_input` + helpers as seen by the printer.
+
+    - Uses the same coordinate math as:
+        - extractComponentPlacements + convertCenterToNominal
+        - pickupComponent / pickupWire
+        - place()
+    - Emits:
+        - initial passiveZ()
+        - G90 before every move (via sendMoveCommand semantics)
+        - VACUUM_ON/OFF exactly like actuateDropper()
+    - No sleeps (they were host-side delays, not part of the G-code itself).
+    """
+    gcode_lines: list[str] = []
+
+    components = solution.get("components", {})
+    wires = solution.get("wires", [])
+
+    gcode_lines.append(f"G0 Z{PASSIVE_HEIGHT}")
+
+    for comp_name in sorted(components.keys()):
+        comp_data = components[comp_name]
+        pins = comp_data.get("pins", [])
+        if len(pins) < 2:
+            continue
+
+        # ---------- Board placement center (same as extractComponentPlacements) ----------
+        # Old code: converted.setdefault(name, []).append(convertCornersToCenter(dict_body["pins"]))
+        # where convertCornersToCenter uses p[0] as "x" and p[1] as "y".
+        center_x_board, center_y_board = convertCornersToCenter(pins)
+
+        # Old convertCenterToNominal:
+        #   nominal_x = column_to_x(center_x)
+        #   nominal_y = row_to_y(center_y)
+        nominal_x_board = column_to_x(center_x_board)
+        nominal_y_board = row_to_y(center_y_board)
+
+        # pickupComponent(id):
+        #   part_type = letters, part_num = trailing digits (default 1)
+        m = re.match(r"^([A-Z]+)(\d+)$", comp_name)
+        if m:
+            part_type, part_num = m.group(1), int(m.group(2))
+        else:
+            part_type, part_num = comp_name, 1
+
+        if part_type not in col_dict or part_type not in len_dict:
+            # This is what the old script would effectively "do" (blow up);
+            # here we just skip with a warning instead of crashing.
+            print(f"[WARNING] Unknown component type {part_type} for {comp_name}, skipping.")
+            continue
+
+        # Old pickupComponent center grid:
+        # center_X, center_Y = convertCornersToCenter([
+        #   (col_dict[part_type], (part_num-1)*(len_dict[part_type]-1)),
+        #   (col_dict[part_type], (part_num)  *(len_dict[part_type]-1)),
+        # ])
+        pickup_center_x, pickup_center_y = convertCornersToCenter(
+            [
+                (col_dict[part_type],
+                 (part_num - 1) * (len_dict[part_type] - 1)),
+                (col_dict[part_type],
+                 (part_num) * (len_dict[part_type] - 1)),
+            ]
+        )
+        pickup_nom_x = column_to_x(pickup_center_x)
+        pickup_nom_y = row_to_y(pickup_center_y)
+
+        # ---------- sendMoveCommand("pickup", (pickup_nom_x, pickup_nom_y)) ----------
+        # old sendMoveCommand:
+        #   o = [0, 0, 25]
+        #   if board=="pickup":
+        #       o[0] += X_ORIGIN_PICKUP + X
+        #       o[1] =  Y_ORIGIN_PICKUP - Y
+        #   G90
+        #   G0 F6000 X{round(o[0],3)} Y{round(o[1],3)}
+        #   G0 F6000 Z25
+        bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
+        bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
+        gcode_lines.extend([
+            "G90",
+            f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+            "G0 F6000 Z25",
+        ])
+
+        # ---------- actuateDropper("pickup") ----------
+        # old pickup branch:
+        #   G0 Z{PICKUP_HEIGHT}
+        #   VACUUM_ON
+        #   G0 Z{PASSIVE_HEIGHT}
+        gcode_lines.extend([
+            f"G0 Z{PICKUP_HEIGHT}",
+            "VACUUM_ON",
+            f"G0 Z{PASSIVE_HEIGHT}",
+        ])
+
+        # ---------- sendMoveCommand("placement", (nominal_x_board, nominal_y_board)) ----------
+        bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
+        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
+        gcode_lines.extend([
+            "G90",
+            f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
+            "G0 F6000 Z25",
+        ])
+
+        # ---------- actuateDropper("placement") ----------
+        # old placement branch:
+        #   G0 Z{PLACE_HEIGHT}
+        #   VACUUM_OFF
+        #   G0 Z{PASSIVE_HEIGHT}
+        gcode_lines.extend([
+            f"G0 Z{PLACE_HEIGHT}",
+            "VACUUM_OFF",
+            f"G0 Z{PASSIVE_HEIGHT}",
+        ])
+
+    # so every wire is effectively picked from the same storage location.
+    local_wires_used = dict(wires_used)  # start from the same initial values
+
+    for wire in wires:
+        holes = wire.get("holes", [])
+        if not holes:
+            continue
+        
+        xs = [p[0] for p in holes]
+        ys = [p[1] for p in holes]
+        if len(set(xs)) > 1:
+            varying = xs
+        else:
+            varying = ys
+        wire_length = max(varying) - min(varying) + 1
+        wire_type = f"W{wire_length}"
+
+        if wire_type not in col_dict or wire_type not in len_dict:
+            print(f"[WARNING] Unknown wire type {wire_type}, skipping wire.")
+            continue
+
+        slot_idx = local_wires_used.get(wire_type, 0)
+        center_x_pickup, center_y_pickup = convertCornersToCenter(
+            [
+                (col_dict[wire_type], slot_idx * (len_dict[wire_type] - 1)),
+                (col_dict[wire_type], (slot_idx + 1) * (len_dict[wire_type] - 1)),
+            ]
+        )
+        pickup_nom_x = column_to_x(center_x_pickup)
+        pickup_nom_y = row_to_y(center_y_pickup)
+
+        bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
+        bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
+        gcode_lines.extend([
+            "G90",
+            f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+            "G0 F6000 Z25",
+        ])
+        gcode_lines.extend([
+            f"G0 Z{PICKUP_HEIGHT}",
+            "VACUUM_ON",
+            f"G0 Z{PASSIVE_HEIGHT}",
+        ])
+
+        center_x_board, center_y_board = convertCornersToCenter(holes)
+        nominal_x_board = column_to_x(center_x_board)
+        nominal_y_board = row_to_y(center_y_board)
+
+        bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
+        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
+        gcode_lines.extend([
+            "G90",
+            f"G0 F6000 X{round(bed_x_place, 3)} Y{round(bed_y_place, 3)}",
+            "G0 F6000 Z25",
+        ])
+        gcode_lines.extend([
+            f"G0 Z{PLACE_HEIGHT}",
+            "VACUUM_OFF",
+            f"G0 Z{PASSIVE_HEIGHT}",
+        ])
+
+    return "\n".join(gcode_lines) + "\n"
+
+
+_wires_used = {"W6": 0}
+
+
+def _send_gcode_command(command: str) -> bool:
+    """Send a single G-code command to the printer."""
+    try:
+        payload = {"script": command}
+        response = requests.post(MOONRAKER_URL, json=payload, timeout=10)
+        if response.status_code == 200:
+            return True
+        else:
+            print(f"[ERROR] Moonraker {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        print(f"[ERROR] Failed to send command: {e}")
+        return False
+
+
+def execute_gcode_script(gcode: str, delay_between: float = 0.0) -> bool:
+    """
+    Execute a previously generated G-code script line by line.
+
+    This is the "runner" half of the split:
+
+      solution --> generate_gcode_from_solution(...) --> gcode_string
+      gcode_string --> execute_gcode_script(gcode_string)
+
+    Args:
+        gcode: Full G-code script as a single string.
+        delay_between: optional delay (seconds) between lines, if you
+                       want to throttle; default 0 = firehose.
+
+    Returns:
+        True on success, False if any line fails to send.
+    """
+    for raw_line in gcode.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue  # skip blank lines
+        if line.startswith(";"):
+            continue  # skip comments, if any
+
+        if not _send_gcode_command(line):
+            print(f"[ERROR] Failed sending G-code line: {line!r}")
+            return False
+
+        if delay_between > 0:
+            time.sleep(delay_between)
+
+    return True

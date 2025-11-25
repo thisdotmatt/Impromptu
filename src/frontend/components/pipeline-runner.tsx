@@ -80,6 +80,9 @@ export function PipelineRunner({
   // NEW: capture start times synchronously to beat React's batching
   const stageStartRef = useRef<Record<string, number>>({})
 
+  const updateQueueRef = useRef<Array<() => void>>([])
+  const isProcessingRef = useRef(false)
+
   useEffect(() => {
     onStagesUpdate?.(stages)
   }, [stages, onStagesUpdate])
@@ -179,6 +182,22 @@ export function PipelineRunner({
     return `${minutes}m ${remainingSeconds}s`
   }
 
+  const processUpdateQueue = async () => {
+    if (isProcessingRef.current) return
+    isProcessingRef.current = true
+
+    while (updateQueueRef.current.length > 0) {
+      const update = updateQueueRef.current.shift()
+      if (update) {
+        update() // Execute the update
+        // Force a render by waiting for the next animation frame
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+      }
+    }
+
+    isProcessingRef.current = false
+  }
+
   const handleStreamUpdate = (update: {
     stage: string
     status: "running" | "success" | "error" | "completed"
@@ -191,70 +210,52 @@ export function PipelineRunner({
   }) => {
     const { stage, status, result, subStage, tokenCost, startTimeMs, endTimeMs, durationMs } = update
 
-    console.debug("[handleStreamUpdate] Incoming update:", {
-      stage,
-      status,
-      resultKeys: result ? Object.keys(result) : null,
-      subStage,
-      durationMs,
-    })
-
     if (!subStage) {
-      // CRITICAL: set selectedStageId synchronously BEFORE state update
       setSelectedStageId(stage)
-      console.debug("[handleStreamUpdate] setSelectedStageId ->", stage)
-
       const nowMs = Date.now()
+
       if (status === "running") {
         if (!stageStartRef.current[stage]) stageStartRef.current[stage] = startTimeMs ?? nowMs
       }
 
-      flushSync(() => {
-        setStages((prevStages) => {
-          const updated = prevStages.map((currentStage) => {
-            if (currentStage.id !== stage) return currentStage
+      // Queue the update
+      updateQueueRef.current.push(() => {
+        flushSync(() => {
+          setStages((prevStages) => {
+            return prevStages.map((currentStage) => {
+              if (currentStage.id !== stage) return currentStage
 
-            const startTime = status === "running" ? new Date(stageStartRef.current[stage]) : currentStage.startTime
-            const endTime = status === "success" || status === "error" ? new Date(endTimeMs ?? Date.now()) : currentStage.endTime
-            const newDuration =
-              (durationMs != null && durationMs >= 0)
-                ? durationMs
-                : startTime && endTime
-                ? endTime.getTime() - (startTime?.getTime() ?? endTime.getTime())
-                : currentStage.duration
+              const startTime = status === "running" ? new Date(stageStartRef.current[stage]) : currentStage.startTime
+              const endTime = status === "success" || status === "error" ? new Date(endTimeMs ?? Date.now()) : currentStage.endTime
+              const newDuration =
+                (durationMs != null && durationMs >= 0)
+                  ? durationMs
+                  : startTime && endTime
+                    ? endTime.getTime() - (startTime?.getTime() ?? endTime.getTime())
+                    : currentStage.duration
 
-            const newStage = {
-              ...currentStage,
-              status:
-                status === "running"
-                  ? ("running" as const)
+              return {
+                ...currentStage,
+                status: (status === "running"
+                  ? "running"
                   : status === "success"
-                  ? ("success" as const)
-                  : status === "error"
-                  ? ("error" as const)
-                  : (currentStage.status as StageStatus),
-              result: result ?? currentStage.result, // CRITICAL: only override if result is provided
-              tokenCost: tokenCost ?? currentStage.tokenCost,
-              startTime: startTime ?? currentStage.startTime,
-              endTime: endTime ?? currentStage.endTime,
-              duration: typeof newDuration === "number" ? newDuration : currentStage.duration,
-            }
-
-            console.debug(`[setStages] Updated stage ${stage}:`, {
-              status: newStage.status,
-              resultPresent: !!newStage.result,
-              resultKeys: newStage.result ? Object.keys(newStage.result) : null,
+                    ? "success"
+                    : status === "error"
+                      ? "error"
+                      : currentStage.status) as StageStatus,
+                result: result ?? currentStage.result,
+                tokenCost: tokenCost ?? currentStage.tokenCost,
+                startTime: startTime ?? currentStage.startTime,
+                endTime: endTime ?? currentStage.endTime,
+                duration: typeof newDuration === "number" ? newDuration : currentStage.duration,
+              }
             })
-
-            return newStage
           })
-
-          console.debug("[setStages] All stages after update:", updated)
-          return updated
         })
       })
+
+      processUpdateQueue()
     } else {
-      console.debug("[handleStreamUpdate] Updating substage:", { stage, subStage, status })
       flushSync(() => {
         updateSubStage(stage, subStage, status)
       })
@@ -268,6 +269,7 @@ export function PipelineRunner({
 
     // Reset local start cache
     stageStartRef.current = {}
+    updateQueueRef.current = [] // Clear queue
 
     setStages((prev) =>
       prev.map((stage) => ({
@@ -329,6 +331,8 @@ export function PipelineRunner({
 
             if (type === "workflow_started") {
               handleStreamUpdate({ stage: evt.workflow, status: "running" })
+              // Wait for update to process
+              await new Promise((resolve) => setTimeout(resolve, 50))
               continue
             }
 
@@ -355,12 +359,14 @@ export function PipelineRunner({
                 }
               }
               handleStreamUpdate({ stage, status: "success", result: resultObj, tokenCost, durationMs, endTimeMs: Date.now() })
+              await new Promise((resolve) => setTimeout(resolve, 50))
               continue
             }
 
             if (type === "workflow_failed") {
               const stage = evt.workflow as string
               handleStreamUpdate({ stage, status: "error", result: { error: evt.error ?? evt.err_message }, endTimeMs: Date.now() })
+              await new Promise((resolve) => setTimeout(resolve, 50))
               continue
             }
 
@@ -373,8 +379,6 @@ export function PipelineRunner({
               handleStreamUpdate({ stage: evt.workflow as string, subStage: evt.substage as string, status: "success" })
               continue
             }
-
-            // ignore others
           } catch (e) {
             console.error("Failed to parse SSE event:", e)
           }
@@ -412,7 +416,7 @@ export function PipelineRunner({
   const selectedStage = stages.find((stage) => stage.id === selectedStageId)
   const formatResultValues = (res: Record<string, any>) => {
     console.debug("[formatResultValues] Input result:", res)
-    
+
     if (!res) return "No results"
 
     // Handle nested result objects (e.g., { spec: {...} } or { text: "..." })
@@ -422,13 +426,13 @@ export function PipelineRunner({
     return entries
       .map(([key, value]) => {
         console.debug(`[formatResultValues] Processing key="${key}":`, value)
-        
+
         if (value == null) return ""
-        
+
         if (typeof value === "string") return value
-        
+
         if (typeof value === "number" || typeof value === "boolean") return String(value)
-        
+
         // For objects/arrays, pretty-print
         try {
           return `${key}:\n${JSON.stringify(value, null, 2)}`

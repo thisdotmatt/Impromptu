@@ -1,33 +1,59 @@
 import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
+// (Optional but nice to be explicit)
+// export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
   const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000"
   const payload = await req.json()
-  const run_id = 1
+  const run_id = crypto.randomUUID() // better than a constant 1 if you ever want parallel runs
 
-  const resp = await fetch(`${BACKEND_URL}/create/${run_id}`, {
+  const backendRes = await fetch(`${BACKEND_URL}/create/${run_id}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
     body: JSON.stringify(payload),
-    keepalive: true,
   })
 
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "Backend error")
-    return new Response(text, { status: resp.status })
+  if (!backendRes.ok || !backendRes.body) {
+    const text = await backendRes.text().catch(() => "Backend error")
+    return new NextResponse(text, { status: backendRes.status })
   }
 
-  // Forward backend headers and force SSE-compatible headers
-  const headers = new Headers(resp.headers)
-  headers.set("Cache-Control", "no-cache")
-  headers.set("Connection", "keep-alive")
-  headers.set("Content-Type", "text/event-stream; charset=utf-8")
+  // Create a new streaming response that *pipes* the backend stream
+  const stream = new ReadableStream({
+    start(controller) {
+      const reader = backendRes.body!.getReader()
 
-  return new Response(resp.body, {
-    status: resp.status,
-    statusText: resp.statusText,
-    headers,
+      const pump = (): any =>
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            controller.close()
+            return
+          }
+          controller.enqueue(value)
+          return pump()
+        })
+
+      pump().catch((err) => {
+        console.error("[generate-circuit] stream pump error", err)
+        controller.error(err)
+      })
+    },
+  })
+
+  return new NextResponse(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      // Helps in some reverse proxies:
+      // "X-Accel-Buffering": "no",
+    },
   })
 }

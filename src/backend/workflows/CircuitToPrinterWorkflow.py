@@ -12,7 +12,6 @@ from utils.helpers import Breadboard, Net, Passive, PnR, renderBreadboard, Dbg
 from workflows.BaseWorkflow import BaseWorkflow
 
 
-# ---- Placement defaults (tweak as needed) -----------------------------------
 COMPONENT_DEFAULTS = {
     "R":   {"length": 3, "orientation": "v"},
     "C":   {"length": 3, "orientation": "v"},
@@ -20,7 +19,6 @@ COMPONENT_DEFAULTS = {
     "D":   {"length": 3, "orientation": "v"}, 
     "LED": {"length": 3, "orientation": "v"},
 }
-# -----------------------------------------------------------------------------
 
 
 def _parse_models_and_instances(netlist_path: str) -> Tuple[set, Dict[str, str]]:

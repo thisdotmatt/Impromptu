@@ -5,7 +5,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from models.OpenAIModel import OpenAIModel
 from openai import OpenAIError, RateLimitError
 from utils.types import AgentResponse, Status
-
+import asyncio
 
 class SpecAgent(BaseAgent):
     """
@@ -41,7 +41,10 @@ class SpecAgent(BaseAgent):
         chain = prompt_template | llm | parser
 
         try:
-            generated_spec = chain.invoke({"user_prompt": prompt, "components": components})
+            generated_spec = await asyncio.to_thread(
+                chain.invoke,
+                {"user_prompt": prompt, "components": components},
+            )
         except RateLimitError as e:  # ask matt to buy more OpenAI credits
             err_message = f"OpenAI quota exceeded with message: {e}"
             print("RateLimitError:", e)

@@ -55,7 +55,7 @@ export function PipelineRunner({
     { id: "spec_generation", name: "Specification Generation", status: "pending" },
     {
       id: "netlist_generation",
-      name: "Circuit Netlist Pipeline",
+      name: "Circuit Design",
       status: "pending",
       subStages: [
         { id: "generate", name: "Generate netlist", status: "pending" },
@@ -337,9 +337,12 @@ export function PipelineRunner({
             }
 
             if (type === "workflow_succeeded") {
+              console.log("workflow_succeeded event:", evt)  // <-- ADD THIS
               const stage = evt.workflow as string
               const ctx = evt.context ?? {}
+              console.log(`Stage: ${stage}, context:`, ctx)  // <-- ADD THIS
               const durationMs = typeof ctx.duration_ns === "number" ? Math.max(0, Math.floor(ctx.duration_ns / 1_000_000)) : undefined
+              console.log(`Calculated durationMs: ${durationMs}`)  // <-- ADD THIS
               const tokenCost = {
                 inputTokens: Number(ctx.input_tokens ?? 0),
                 outputTokens: Number(ctx.output_tokens ?? 0),
@@ -546,11 +549,12 @@ export function PipelineRunner({
                       </div>
                     )}
                     {typeof stage.duration === "number" && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground animate-in fade-in duration-300">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         <span>{formatDuration(stage.duration)}</span>
                       </div>
                     )}
+                    
                   </div>
                 </div>
               </button>

@@ -3,6 +3,8 @@ LTSPICE_PATH = "C:\\Users\\mgrim\\AppData\\Local\\Programs\\ADI\\LTspice\\LTspic
 MAX_RUN_COST = 0.001  # in USD
 MAX_RETRIES = 1
 USE_MOCK_LLM = False
+WIRE_LENGTHS = (1, 2, 3)
+BB_ROWS = 30
 
 components = """
 LED x1

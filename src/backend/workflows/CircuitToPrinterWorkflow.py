@@ -16,6 +16,7 @@ from utils.helpers import (
 )
 from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
+from config import WIRE_LENGTHS, BB_ROWS
 
 # Printer IP for G-code execution
 MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
@@ -316,7 +317,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             # Breadboard & PnR
             print("[DEBUG] Initializing Breadboard...")
             dbg = Dbg(on=True, logfile="pnr_debug.log")  # Enable debugging
-            bb = Breadboard(rows=30, wire_lengths=(1, 2, 3, 4, 5, 6))
+            bb = Breadboard(rows=BB_ROWS, wire_lengths=WIRE_LENGTHS)
             print(
                 f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails"
             )
@@ -335,22 +336,21 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
                 return state
 
             sol = pnr.solution()
-            print(f"[DEBUG] Solution: {sol}")
+            #print(f"[DEBUG] Solution: {sol}")
 
             # Generate real G-code from PnR solution
             print("[DEBUG] Generating G-code from PnR solution...")
             gcode_output = generate_gcode_from_solution(sol)
             print(f"[DEBUG] G-code generated successfully ({len(gcode_output)} bytes)")
 
-            # Render breadboard (now returns base64 string)
             breadboard_image_b64 = renderBreadboard(sol, bb, filename=None, show=False)
 
-            # Store results with real G-code
+            # Store results
             result_name = f"{workflow_name}_result"
             state.context[result_name] = {
                 "routing": "P&R completed successfully",
                 "gcode": gcode_output,
-                "breadboard_image": breadboard_image_b64,  # Already a string
+                "breadboard_image": breadboard_image_b64,
             }
             state.status = Status.SUCCESS
             print("[DEBUG] Workflow completed successfully")
@@ -361,7 +361,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             state.context["err_message"] = str(e)
             state.status = Status.ERROR
 
-        await asyncio.sleep(1)  # optional
+        await asyncio.sleep(1) 
 
         await updateCallback(
             "substage_completed",

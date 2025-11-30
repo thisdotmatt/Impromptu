@@ -4,7 +4,7 @@ from typing import Awaitable, Dict, List
 
 import ltspice
 from agents.NetlistAgent import NetlistAgent
-from config import LTSPICE_PATH
+from config import LTSPICE_PATH, USE_MOCK_LLM
 from spicelib import SimRunner, SpiceEditor
 from spicelib.simulators.ltspice_simulator import LTspice
 from utils.helpers import validateNetlist
@@ -124,6 +124,7 @@ class NetlistWorkflow(BaseWorkflow):
 
 
 async def simulate_tool(state: WorkflowState):
+    if USE_MOCK_LLM: return
     try:
         result_key = f"{state.current_workflow}_result"
         netlist_str = state.context.get(result_key, {}).get("netlist")
@@ -185,6 +186,7 @@ async def simulate_tool(state: WorkflowState):
 
 
 async def verify_tool(state: WorkflowState):
+    if USE_MOCK_LLM: return
     try:
         sim_result = state.context.get("simulation_result", {})
         raw_path = sim_result.get("raw_path")

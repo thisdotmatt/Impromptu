@@ -317,7 +317,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             # Breadboard & PnR
             print("[DEBUG] Initializing Breadboard...")
             dbg = Dbg(on=True, logfile="pnr_debug.log")  # Enable debugging
-            bb = Breadboard(rows=BB_ROWS, wire_lengths=WIRE_LENGTHS)
+            bb = Breadboard(rows=BB_ROWS, wire_lengths=WIRE_LENGTHS, enforce_strip_tolerance=True)
             print(
                 f"[DEBUG] Breadboard created: {len(bb.holes)} holes, {len(bb.rails_v)} V+ rails, {len(bb.rails_g)} GND rails"
             )
@@ -336,7 +336,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
                 return state
 
             sol = pnr.solution()
-            #print(f"[DEBUG] Solution: {sol}")
+            print(f"[DEBUG] Solution: {sol}")
 
             # Generate real G-code from PnR solution
             print("[DEBUG] Generating G-code from PnR solution...")

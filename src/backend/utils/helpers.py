@@ -12,14 +12,14 @@ from ltspice import Ltspice
 from matplotlib.patches import Circle, Rectangle
 
 
-# ===================================================================== #
-# G-CODE GENERATION
-# ===================================================================== #
+#####
+# GCODE SHIT
+#####
 
-# Printer configuration
+# klipper shi
 MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
 
-# Printer and board offsets
+# Printer and board offset shi
 X_ORIGIN_PLACEMENT = 107.50
 Y_ORIGIN_PLACEMENT = 190
 X_ORIGIN_PICKUP = 156.5
@@ -441,7 +441,7 @@ class Breadboard:
     - Some columns are "gaps" with no holes (just visual spacing).
     """
 
-    def __init__(self, rows=40, wire_lengths=(1, 3, 5)):
+    def __init__(self, rows=40, wire_lengths=(1, 3, 5), enforce_strip_tolerance=False):
         self.rows = rows
 
         # Main board geometry
@@ -452,6 +452,7 @@ class Breadboard:
 
         # Allowed wire jumper lengths (in hole-to-hole distance)
         self.wire_lengths = sorted(set(wire_lengths))
+        self.enforce_strip_tolerance = enforce_strip_tolerance
 
         # Geometry containers
         self.holes = set()  # All board holes (excluding rails)
@@ -579,20 +580,76 @@ class Breadboard:
     # --------------------------------------------------------------------- #
     # Occupancy / claim helpers
     # --------------------------------------------------------------------- #
+    def _strip_tolerance_ok(self, new_thing_holes):
+        """
+        Enforce spacing rule on 5-hole strips:
+
+        - Only 'comp_pin' and 'wire_end' count as "things".
+        - On each strip touched by new_thing_holes:
+            * No two things may be adjacent.
+            * At most 3 things total.
+
+        Returns True if ok, False if violation.
+        """
+        if not self.enforce_strip_tolerance:
+            return True
+
+        # Gather strips that are affected by the new "things"
+        strips = set()
+        for h in new_thing_holes:
+            strip = self.strip_of_hole.get(h)
+            if strip:
+                strips.add(strip)
+
+        for strip in strips:
+            # Order holes on the strip left-to-right
+            ordered = sorted(strip, key=lambda x: x[1])
+
+            prev_is_thing = False
+            thing_count = 0
+
+            for h in ordered:
+                typ, _ = self.occ[h]
+                is_thing = (typ in ("comp_pin", "wire_end"))
+                if is_thing:
+                    thing_count += 1
+                    # No adjacency allowed
+                    if prev_is_thing:
+                        return False
+                    prev_is_thing = True
+                else:
+                    prev_is_thing = False
+
+            if thing_count > 3:
+                return False
+
+        return True
+
     def claim_component(self, comp_id, body_holes, pin_holes):
         """
         Mark a component's body and pin holes as occupied.
 
-        Returns True if successful, or False if any hole was already in use.
+        Returns True if successful, or False if any hole was already in use
+        or strip tolerance is violated.
         """
+        # All must be empty first
         for hole in body_holes + pin_holes:
             if self.occ[hole][0] != "empty":
                 return False
 
+        # Tentatively claim
         for hole in body_holes:
             self.occ[hole] = ("comp_body", comp_id)
         for hole in pin_holes:
             self.occ[hole] = ("comp_pin", comp_id)
+
+        # NEW: enforce strip spacing based on component pins
+        if not self._strip_tolerance_ok(pin_holes):
+            # Roll back
+            for hole in body_holes + pin_holes:
+                self.occ[hole] = ("empty", None)
+            return False
+
         return True
 
     def release_component(self, body_holes, pin_holes):
@@ -604,6 +661,7 @@ class Breadboard:
         """
         Claim all real holes along a straight wire path.
         Endpoints are marked as 'wire_end'; interior as 'wire_body'.
+        Returns True on success, False on conflict or spacing violation.
         """
         if len(path_holes) < 2:
             return False
@@ -613,11 +671,21 @@ class Breadboard:
             if self.occ[hole][0] != "empty":
                 return False
 
+        # Tentatively claim occupancy
         for i, hole in enumerate(path_holes):
             if i == 0 or i == len(path_holes) - 1:
                 self.occ[hole] = ("wire_end", seg_id)
             else:
                 self.occ[hole] = ("wire_body", seg_id)
+
+        # NEW: enforce strip spacing based on the endpoints ("things")
+        end_holes = [path_holes[0], path_holes[-1]]
+        if not self._strip_tolerance_ok(end_holes):
+            # Roll back
+            for hole in path_holes:
+                self.occ[hole] = ("empty", None)
+            return False
+
         return True
 
     def release_wire_segment(self, path_holes):
@@ -1301,7 +1369,7 @@ class PnR:
 
         candidates.sort(key=lambda plc: self.placement_score(comp, plc))
 
-        K = 80
+        K = 100
         if len(candidates) > K:
             candidates = candidates[:K]
 

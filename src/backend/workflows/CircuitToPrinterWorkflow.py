@@ -19,14 +19,14 @@ from workflows.BaseWorkflow import BaseWorkflow
 from config import WIRE_LENGTHS, BB_ROWS
 
 # Printer IP for G-code execution
-MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
+MOONRAKER_URL = "http://172.20.10.3/printer/gcode/script"
 
 COMPONENT_DEFAULTS = {
-    "R": {"length": 3, "orientation": "v"},
-    "C": {"length": 3, "orientation": "v"},
-    "L": {"length": 3, "orientation": "v"},
-    "D": {"length": 3, "orientation": "v"},
-    "LED": {"length": 3, "orientation": "v"},
+    "R": {"length": 6, "orientation": "v"},
+    "C": {"length": 6, "orientation": "v"},
+    "L": {"length": 6, "orientation": "v"},
+    "D": {"length": 6, "orientation": "v"},
+    "LED": {"length": 6, "orientation": "v"},
 }
 
 

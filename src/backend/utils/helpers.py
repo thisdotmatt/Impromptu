@@ -17,7 +17,7 @@ from matplotlib.patches import Circle, Rectangle
 #####
 
 # klipper shi
-MOONRAKER_URL = "http://10.3.141.1/printer/gcode/script"
+MOONRAKER_URL = "http://172.20.10.3/printer/gcode/script"
 
 # Printer and board offset shi
 X_ORIGIN_PLACEMENT = 107.50
@@ -30,7 +30,7 @@ PASSIVE_HEIGHT = 45
 
 # Component pickup coordinates
 col_dict = {"R": 0, "C": 2, "L": 4, "LED": 6, "W4": 8}
-len_dict = {"R": 6, "C": 6, "L": 6, "LED": 6, "W4": 6}
+len_dict = {"R": 6, "C": 6, "L": 6, "LED": 6, "W4": 4}
 wires_used = {"W4": 3}
 
 
@@ -1345,8 +1345,8 @@ class PnR:
         Recursive backtracking over component placements.
         """
         if idx == len(ordered_comps):
-            # All components placed, now route all nets
             self.dbg.tick("routing all nets")
+            print(f"[DEBUG] All {len(ordered_comps)} components placed. Starting routing...")
 
             for net in self.nets.values():
                 self.release_net_wires(net)
@@ -1354,18 +1354,23 @@ class PnR:
             self.bb.rebuild_union_find(self.nets)
 
             for net in self.nets.values():
+                print(f"[DEBUG] Routing net '{net.name}': {len(net.terms)} terms, anchors={net.fixed_anchors}")
                 self.dbg.p(f"route net {net.name}")
                 if not self.route_net(net):
+                    print(f"[ERROR] Failed to route net '{net.name}'")
                     return False
 
             if self.shorts_exist():
+                print(f"[ERROR] Short circuit detected after routing!")
                 self.dbg.p("Short exists")
                 return False
 
+            print(f"[SUCCESS] Routing complete, no shorts detected")
             return True
 
         comp = ordered_comps[idx]
         candidates = comp.legal_placements(self.bb)
+        print(f"[DEBUG] Placing {comp.name} ({comp.net_a} <-> {comp.net_b}): {len(candidates)} legal placements")
 
         candidates.sort(key=lambda plc: self.placement_score(comp, plc))
 
@@ -1373,10 +1378,9 @@ class PnR:
         if len(candidates) > K:
             candidates = candidates[:K]
 
-        self.dbg.p(f"[REC] try {comp.name}: {len(candidates)} placements")
-
-        for placement in candidates:
-            _, _, pins = placement
+        for attempt, placement in enumerate(candidates):
+            anchor, body, pins = placement
+            pin_a, pin_b = pins
 
             if not self.try_place_component(comp, placement):
                 continue
@@ -1384,12 +1388,12 @@ class PnR:
             bind_pins(comp)
 
             if self.forward_check(comp, placement):
-                self.dbg.p(f"placed {comp.name} at {placement[0]}")
+                print(f"[OK] {comp.name} at anchor={anchor}, pins={pins}")
                 if self._place_rec(idx + 1, ordered_comps, bind_pins):
                     return True
-                self.dbg.p(f"backtrack from {comp.name}")
+                print(f"[BACKTRACK] {comp.name} - subtree failed")
             else:
-                self.dbg.p(f"[REC] forward_check FAILED for {comp.name}")
+                print(f"[REJECT] {comp.name} at {anchor} - forward_check failed")
 
             # Remove pins from their nets
             pin_a_hole, pin_b_hole = self.pin_of_comp[comp.name]
@@ -1400,6 +1404,7 @@ class PnR:
 
             self.undo_place_component(comp)
 
+        print(f"[EXHAUSTED] {comp.name} - all {len(candidates)} placements failed")
         return False
 
     # ------------------------------------------------------------------ #

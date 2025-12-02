@@ -20,23 +20,37 @@ from matplotlib.patches import Circle, Rectangle
 MOONRAKER_URL = "http://172.20.10.3/printer/gcode/script"
 
 # Printer and board offset shi
-X_ORIGIN_PLACEMENT = 107.50
-Y_ORIGIN_PLACEMENT = 190
-X_ORIGIN_PICKUP = 156.5
-Y_ORIGIN_PICKUP = 141.5
+X_ORIGIN_PLACEMENT = 106.30
+Y_ORIGIN_PLACEMENT = 189.50
+X_ORIGIN_PICKUP = 155.00
+Y_ORIGIN_PICKUP = 141.00
 PLACE_HEIGHT = 14
 PICKUP_HEIGHT = 14
 PASSIVE_HEIGHT = 45
+offset = 4
 
 # Component pickup coordinates
-col_dict = {"R": 0, "C": 2, "L": 4, "LED": 6, "W4": 8}
-len_dict = {"R": 6, "C": 6, "L": 6, "LED": 6, "W4": 4}
+col_dict = {"R": 0, "C": 2, "L": 4, "LED": 8}
+len_dict = {"R": 6, "C": 6, "L": 6, "LED": 6}
+component_vals = {"R": (156.00, 134.65), "C": (), "L": (), "LED": (172.81, 134.65)}
+wire_vals = {"W4": [(158.81, 87.67), (172.10, 87.67), (158.81, 82.50)]}
+wires_centers = {"W4": [(21, 1.5), (21, 6.5), (23, 1.5), (23, 6.5)]}
 wires_used = {"W4": 3}
+wire_idx = 0
 
+
+
+'''
+LED: 172.81, 134.65
+Resistor: 156.00, 134.65
+Wire1: 158.81, 87.67
+Wire2: 172.10, 87.67
+Wire3: 158.81, 82.50
+'''
 
 def column_to_x(col_f, pitch=2.54):
     """Convert column index to X coordinate."""
-    return col_f * pitch
+    return (col_f-0.2) * pitch
 
 def row_to_y(row, pitch=2.54):
     """Convert row index to Y coordinate."""
@@ -73,16 +87,23 @@ def generate_gcode_from_solution(solution: dict) -> str:
         - VACUUM_ON/OFF exactly like actuateDropper()
     - No sleeps (they were host-side delays, not part of the G-code itself).
     """
+    print(solution)
     gcode_lines: list[str] = []
 
     components = solution.get("components", {})
     wires = solution.get("wires", [])
+    print("Components: ", components)
+    print("Wires: ", wires)
 
     gcode_lines.append(f"G0 Z{PASSIVE_HEIGHT}")
 
     for comp_name in sorted(components.keys()):
+        print("NOW PROCESSING: ", comp_name)
         comp_data = components[comp_name]
         pins = comp_data.get("pins", [])
+        print("Pins: ", pins)
+        pins = [(pins[0][0] + offset, pins[0][1]), (pins[1][0]+offset, pins[1][1])]
+        print("Pins: ", pins)
         if len(pins) < 2:
             continue
 
@@ -90,12 +111,13 @@ def generate_gcode_from_solution(solution: dict) -> str:
         # Old code: converted.setdefault(name, []).append(convertCornersToCenter(dict_body["pins"]))
         # where convertCornersToCenter uses p[0] as "x" and p[1] as "y".
         center_x_board, center_y_board = convertCornersToCenter(pins)
-
+        print("Centers: ", center_x_board, center_y_board)
         # Old convertCenterToNominal:
         #   nominal_x = column_to_x(center_x)
         #   nominal_y = row_to_y(center_y)
         nominal_x_board = column_to_x(center_x_board)
         nominal_y_board = row_to_y(center_y_board)
+        print("nominal x/y board: ", nominal_x_board, nominal_y_board)
 
         # pickupComponent(id):
         #   part_type = letters, part_num = trailing digits (default 1)
@@ -122,8 +144,11 @@ def generate_gcode_from_solution(solution: dict) -> str:
                 (col_dict[part_type], (part_num) * (len_dict[part_type] - 1)),
             ]
         )
+        print("Pickup centers: ",  pickup_center_x, pickup_center_y)
         pickup_nom_x = column_to_x(pickup_center_x)
         pickup_nom_y = row_to_y(pickup_center_y)
+        
+        print("Pickup centers nominal: ",  pickup_nom_x, pickup_nom_y)
 
         # ---------- sendMoveCommand("pickup", (pickup_nom_x, pickup_nom_y)) ----------
         # old sendMoveCommand:
@@ -134,12 +159,14 @@ def generate_gcode_from_solution(solution: dict) -> str:
         #   G90
         #   G0 F6000 X{round(o[0],3)} Y{round(o[1],3)}
         #   G0 F6000 Z25
+        print(X_ORIGIN_PICKUP, Y_ORIGIN_PICKUP)
         bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
         bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
+        print("Bed pickup: ", bed_x_pickup, bed_y_pickup)
         gcode_lines.extend(
             [
                 "G90",
-                f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+                f"G0 F6000 X{round(component_vals[part_type][0], 3)} Y{round(component_vals[part_type][1], 3)}",
                 "G0 F6000 Z25",
             ]
         )
@@ -153,13 +180,16 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PICKUP_HEIGHT}",
                 "VACUUM_ON",
+                f"G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
 
         # ---------- sendMoveCommand("placement", (nominal_x_board, nominal_y_board)) ----------
-        bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
-        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
+        bed_x_place = X_ORIGIN_PLACEMENT + nominal_y_board
+        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_x_board
+        print("Placement Origin: ", X_ORIGIN_PLACEMENT, Y_ORIGIN_PLACEMENT)
+        print("Bed placement: ", bed_x_place, bed_y_place)
         gcode_lines.extend(
             [
                 "G90",
@@ -181,15 +211,13 @@ def generate_gcode_from_solution(solution: dict) -> str:
             ]
         )
 
-    # so every wire is effectively picked from the same storage location.
-    local_wires_used = dict(wires_used)  # start from the same initial values
-
+    wire_idx = 0
     for wire in wires:
         holes = wire.get("holes", [])
         if not holes:
             continue
-
-        xs = [p[0] for p in holes]
+        holes = [(holes[0][0] + offset, holes[0][1]), (holes[1][0]+offset, holes[1][1])]
+        xs = [p[0]+ offset for p in holes]
         ys = [p[1] for p in holes]
         if len(set(xs)) > 1:
             varying = xs
@@ -197,27 +225,24 @@ def generate_gcode_from_solution(solution: dict) -> str:
             varying = ys
         wire_length = max(varying) - min(varying) + 1
         wire_type = f"W{wire_length}"
-
-        if wire_type not in col_dict or wire_type not in len_dict:
+        
+        print("Currently working with wire type: ", wire_type)
+        if wire_type not in wires_centers:
             print(f"[WARNING] Unknown wire type {wire_type}, skipping wire.")
             continue
 
-        slot_idx = local_wires_used.get(wire_type, 0)
-        center_x_pickup, center_y_pickup = convertCornersToCenter(
-            [
-                (col_dict[wire_type], slot_idx * (len_dict[wire_type] - 1)),
-                (col_dict[wire_type], (slot_idx + 1) * (len_dict[wire_type] - 1)),
-            ]
-        )
+        center_x_pickup, center_y_pickup = wires_centers[wire_type][wire_idx][0], wires_centers[wire_type][wire_idx][1]
+        print("Wire centers: ", center_x_pickup, center_y_pickup)
         pickup_nom_x = column_to_x(center_x_pickup)
         pickup_nom_y = row_to_y(center_y_pickup)
 
-        bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_x
-        bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_y
+        bed_x_pickup = X_ORIGIN_PICKUP + pickup_nom_y
+        bed_y_pickup = Y_ORIGIN_PICKUP - pickup_nom_x
+        print("Wire ACTUAL pickup: ", bed_x_pickup, bed_y_pickup)
         gcode_lines.extend(
             [
                 "G90",
-                f"G0 F6000 X{round(bed_x_pickup, 3)} Y{round(bed_y_pickup, 3)}",
+                f"G0 F6000 X{round(wire_vals['W4'][wire_idx][0], 3)} Y{round(wire_vals['W4'][wire_idx][1], 3)}",
                 "G0 F6000 Z25",
             ]
         )
@@ -225,16 +250,19 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PICKUP_HEIGHT}",
                 "VACUUM_ON",
+                f"G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
 
         center_x_board, center_y_board = convertCornersToCenter(holes)
+        print("Wire center placement: ", center_x_board, center_y_board)
         nominal_x_board = column_to_x(center_x_board)
         nominal_y_board = row_to_y(center_y_board)
 
-        bed_x_place = X_ORIGIN_PLACEMENT + nominal_x_board
-        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_y_board
+        bed_x_place = X_ORIGIN_PLACEMENT + nominal_y_board
+        bed_y_place = Y_ORIGIN_PLACEMENT - nominal_x_board
+        print("Wire ACTUAL placement: ", bed_x_place, bed_y_place)
         gcode_lines.extend(
             [
                 "G90",
@@ -246,9 +274,11 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PLACE_HEIGHT}",
                 "VACUUM_OFF",
+                f"G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
+        wire_idx += 1
 
     return "\n".join(gcode_lines) + "\n"
 
@@ -271,7 +301,7 @@ def _send_gcode_command(command: str) -> bool:
         return False
 
 
-def execute_gcode_script(gcode: str, delay_between: float = 0.0) -> bool:
+def execute_gcode_script(gcode: str, delay_between: float = 0.2) -> bool:
     """
     Execute a previously generated G-code script line by line.
 

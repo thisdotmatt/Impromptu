@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
 import requests
+from config import BB_ROWS, WIRE_LENGTHS
 from spicelib import SpiceEditor
 from utils.helpers import (
     Breadboard,
@@ -16,7 +17,6 @@ from utils.helpers import (
 )
 from utils.types import EventCallback, Status, WorkflowState
 from workflows.BaseWorkflow import BaseWorkflow
-from config import WIRE_LENGTHS, BB_ROWS
 
 # Printer IP for G-code execution
 MOONRAKER_URL = "http://172.20.10.3/printer/gcode/script"
@@ -361,7 +361,7 @@ class CircuitToPrinterWorkflow(BaseWorkflow):
             state.context["err_message"] = str(e)
             state.status = Status.ERROR
 
-        await asyncio.sleep(1) 
+        await asyncio.sleep(1)
 
         await updateCallback(
             "substage_completed",

@@ -11,7 +11,6 @@ import requests
 from ltspice import Ltspice
 from matplotlib.patches import Circle, Rectangle
 
-
 #####
 # GCODE SHIT
 #####
@@ -39,22 +38,24 @@ wires_used = {"W4": 3}
 wire_idx = 0
 
 
-
-'''
+"""
 LED: 172.81, 134.65
 Resistor: 156.00, 134.65
 Wire1: 158.81, 87.67
 Wire2: 172.10, 87.67
 Wire3: 158.81, 82.50
-'''
+"""
+
 
 def column_to_x(col_f, pitch=2.54):
     """Convert column index to X coordinate."""
-    return (col_f-0.2) * pitch
+    return (col_f - 0.2) * pitch
+
 
 def row_to_y(row, pitch=2.54):
     """Convert row index to Y coordinate."""
     return row * pitch
+
 
 def convertCornersToCenter(corners):
     """Calculate center point from corner coordinates."""
@@ -64,6 +65,7 @@ def convertCornersToCenter(corners):
     avg_y = sum(p[1] for p in corners) / len(corners)
     return avg_x, avg_y
 
+
 def convertCenterToNominal(centers):
     """Convert center coordinates to nominal board coordinates."""
     nominals = {}
@@ -71,6 +73,7 @@ def convertCenterToNominal(centers):
         for center in part:
             nominals[name] = (column_to_x(center[0]), row_to_y(center[1]))
     return nominals
+
 
 def generate_gcode_from_solution(solution: dict) -> str:
     """
@@ -102,7 +105,7 @@ def generate_gcode_from_solution(solution: dict) -> str:
         comp_data = components[comp_name]
         pins = comp_data.get("pins", [])
         print("Pins: ", pins)
-        pins = [(pins[0][0] + offset, pins[0][1]), (pins[1][0]+offset, pins[1][1])]
+        pins = [(pins[0][0] + offset, pins[0][1]), (pins[1][0] + offset, pins[1][1])]
         print("Pins: ", pins)
         if len(pins) < 2:
             continue
@@ -144,11 +147,11 @@ def generate_gcode_from_solution(solution: dict) -> str:
                 (col_dict[part_type], (part_num) * (len_dict[part_type] - 1)),
             ]
         )
-        print("Pickup centers: ",  pickup_center_x, pickup_center_y)
+        print("Pickup centers: ", pickup_center_x, pickup_center_y)
         pickup_nom_x = column_to_x(pickup_center_x)
         pickup_nom_y = row_to_y(pickup_center_y)
-        
-        print("Pickup centers nominal: ",  pickup_nom_x, pickup_nom_y)
+
+        print("Pickup centers nominal: ", pickup_nom_x, pickup_nom_y)
 
         # ---------- sendMoveCommand("pickup", (pickup_nom_x, pickup_nom_y)) ----------
         # old sendMoveCommand:
@@ -180,7 +183,7 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PICKUP_HEIGHT}",
                 "VACUUM_ON",
-                f"G4 P500",
+                "G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
@@ -216,8 +219,8 @@ def generate_gcode_from_solution(solution: dict) -> str:
         holes = wire.get("holes", [])
         if not holes:
             continue
-        holes = [(holes[0][0] + offset, holes[0][1]), (holes[1][0]+offset, holes[1][1])]
-        xs = [p[0]+ offset for p in holes]
+        holes = [(holes[0][0] + offset, holes[0][1]), (holes[1][0] + offset, holes[1][1])]
+        xs = [p[0] + offset for p in holes]
         ys = [p[1] for p in holes]
         if len(set(xs)) > 1:
             varying = xs
@@ -225,13 +228,16 @@ def generate_gcode_from_solution(solution: dict) -> str:
             varying = ys
         wire_length = max(varying) - min(varying) + 1
         wire_type = f"W{wire_length}"
-        
+
         print("Currently working with wire type: ", wire_type)
         if wire_type not in wires_centers:
             print(f"[WARNING] Unknown wire type {wire_type}, skipping wire.")
             continue
 
-        center_x_pickup, center_y_pickup = wires_centers[wire_type][wire_idx][0], wires_centers[wire_type][wire_idx][1]
+        center_x_pickup, center_y_pickup = (
+            wires_centers[wire_type][wire_idx][0],
+            wires_centers[wire_type][wire_idx][1],
+        )
         print("Wire centers: ", center_x_pickup, center_y_pickup)
         pickup_nom_x = column_to_x(center_x_pickup)
         pickup_nom_y = row_to_y(center_y_pickup)
@@ -250,7 +256,7 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PICKUP_HEIGHT}",
                 "VACUUM_ON",
-                f"G4 P500",
+                "G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
@@ -274,7 +280,7 @@ def generate_gcode_from_solution(solution: dict) -> str:
             [
                 f"G0 Z{PLACE_HEIGHT}",
                 "VACUUM_OFF",
-                f"G4 P500",
+                "G4 P500",
                 f"G0 Z{PASSIVE_HEIGHT}",
             ]
         )
@@ -333,6 +339,7 @@ def execute_gcode_script(gcode: str, delay_between: float = 0.2) -> bool:
             time.sleep(delay_between)
 
     return True
+
 
 def formatSSEMessage(event) -> str:
     return f"data: {json.dumps(event)}\n\n"
@@ -640,7 +647,7 @@ class Breadboard:
 
             for h in ordered:
                 typ, _ = self.occ[h]
-                is_thing = (typ in ("comp_pin", "wire_end"))
+                is_thing = typ in ("comp_pin", "wire_end")
                 if is_thing:
                     thing_count += 1
                     # No adjacency allowed
@@ -1384,23 +1391,27 @@ class PnR:
             self.bb.rebuild_union_find(self.nets)
 
             for net in self.nets.values():
-                print(f"[DEBUG] Routing net '{net.name}': {len(net.terms)} terms, anchors={net.fixed_anchors}")
+                print(
+                    f"[DEBUG] Routing net '{net.name}': {len(net.terms)} terms, anchors={net.fixed_anchors}"
+                )
                 self.dbg.p(f"route net {net.name}")
                 if not self.route_net(net):
                     print(f"[ERROR] Failed to route net '{net.name}'")
                     return False
 
             if self.shorts_exist():
-                print(f"[ERROR] Short circuit detected after routing!")
+                print("[ERROR] Short circuit detected after routing!")
                 self.dbg.p("Short exists")
                 return False
 
-            print(f"[SUCCESS] Routing complete, no shorts detected")
+            print("[SUCCESS] Routing complete, no shorts detected")
             return True
 
         comp = ordered_comps[idx]
         candidates = comp.legal_placements(self.bb)
-        print(f"[DEBUG] Placing {comp.name} ({comp.net_a} <-> {comp.net_b}): {len(candidates)} legal placements")
+        print(
+            f"[DEBUG] Placing {comp.name} ({comp.net_a} <-> {comp.net_b}): {len(candidates)} legal placements"
+        )
 
         candidates.sort(key=lambda plc: self.placement_score(comp, plc))
 

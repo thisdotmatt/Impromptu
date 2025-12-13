@@ -1,6 +1,9 @@
 # Impromptu
 Impromptu is an automatic circuit prototyper that turns natural language prompts into working breadboard circuits. It combines AI-driven circuit design with a custom pick-and-place machine, making circuit building easy for everyone. You can find our demo videos [here](https://drive.google.com/drive/folders/1bJQ3Fg68RTEXRJWO9ohXb8oNNimG6j_V).
 
+https://github.com/user-attachments/assets/27d6c438-103f-4351-b8cf-1d1348565677
+
+
 ## 📑 Table of Contents
 
 - [Getting Started](#-getting-started)

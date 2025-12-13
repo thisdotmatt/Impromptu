@@ -73,10 +73,4 @@ You can find the relevant documentation [here](docs/docs.md).
 
 ## 🤝 Contributing
 
-Contributions are welcome - to add a feature, create a new branch or fork this repository, and then file a pull request once your feature is complete.
-
-Testing the local API can be done via terminal with the command:
-
-```bash
-curl --no-buffer -X POST -H "Content-Type: application/json" -d "{\"userInput\":\"Blink an LED\",\"conversationContext\":\"some prior messages\",\"selectedModel\":\"gpt-4\",\"retryFromStage\":\"spec_generation\"}" http://127.0.0.1:8000/create/test-run
-```
+Contributions are welcome - to add a feature, create a new branch or fork this repository, and then file a pull request once your feature is complete. Feel free to open an issue for any problems getting started with Impromptu or for any further suggestions to improve the project.
